@@ -302,12 +302,11 @@ function calculateWijs(cards: Card[], troef: CardSuit): Wijs[] {
             card.value !== nextCard.value - 1
         ) {
             // Sequence got broken
-
-            console.log(
-                "seq broke",
-                seqLen,
-                seqCards.map((e) => e.toString())
-            );
+            // console.log(
+            //     "seq broke",
+            //     seqLen,
+            //     seqCards.map((e) => e.toString())
+            // );
 
             let wijsName = seqLen + " op een rij";
             if (seqLen >= 5) {
@@ -351,6 +350,7 @@ function calculateWijs(cards: Card[], troef: CardSuit): Wijs[] {
 
 export class Player {
     hand: CardCollection;
+    offered: number | null = null;
 
     constructor(public scene: Scene, public index: number) {
         const EDGE_SPACING = 100;
@@ -369,6 +369,10 @@ export class Player {
             index == 3 ? -90 : index * 90
         );
     }
+
+    putOffer() {
+        // What to offer?
+    }
 }
 
 export class GameScene extends Scene {
@@ -380,6 +384,7 @@ export class GameScene extends Scene {
     dropZone: Phaser.GameObjects.GameObject;
     dropZoneText: Phaser.GameObjects.Text;
     dropZoneCollection: CardCollection;
+    dealerPlayerIndex = 0;
 
     constructor() {
         super("GameScene");
@@ -393,17 +398,51 @@ export class GameScene extends Scene {
         });
     }
 
-    returnCardsToDealerDeck() {
-        for (let i = 0; i < this.allCards.length; i++) {
-            let card = this.allCards[i];
-            if (card.currentlyInCollection) {
-                card.currentlyInCollection.removeCard(card);
-                card.currentlyInCollection = undefined;
+    returnCardsToDealerDeckAndDeal() {
+        let newAllCards: Card[] = [];
+        for (let p = 0; p < this.players.length; p++) {
+            let player = this.players[p];
+            let playerCards = [...player.hand.cards];
+            for (let i = 0; i < playerCards.length; i++) {
+                let card = playerCards[i];
+                if (card.currentlyInCollection) {
+                    card.currentlyInCollection.removeCard(card);
+                    card.currentlyInCollection = undefined;
+                }
+                card.moveTo(window.innerWidth / 2, window.innerHeight / 2, 0);
+                card.setDepth(10 + i);
+                card.setFaceDown(true);
+                newAllCards.push(card);
             }
-            card.moveTo(window.innerWidth / 2, window.innerHeight / 2, 0);
-            card.setDepth(10 + i);
-            card.setFaceDown(true);
         }
+
+        // Do 1 deck cut
+        let cuts = 1;
+        for (let i = 0; i < cuts; i++) {
+            let cutIndex =
+                Math.floor(Math.random() * (newAllCards.length - 8)) + 4;
+            newAllCards = [
+                ...newAllCards.slice(cutIndex),
+                ...newAllCards.slice(0, cutIndex),
+            ];
+        }
+
+        this.allCards = newAllCards;
+
+        this.time.delayedCall(1000, () => {
+            this.dealCards();
+        });
+
+        // for (let i = 0; i < this.allCards.length; i++) {
+        //     let card = this.allCards[i];
+        //     if (card.currentlyInCollection) {
+        //         card.currentlyInCollection.removeCard(card);
+        //         card.currentlyInCollection = undefined;
+        //     }
+        //     card.moveTo(window.innerWidth / 2, window.innerHeight / 2, 0);
+        //     card.setDepth(10 + i);
+        //     card.setFaceDown(true);
+        // }
     }
 
     shuffleCards() {
@@ -417,8 +456,6 @@ export class GameScene extends Scene {
     }
 
     dealCards() {
-        this.shuffleCards();
-
         // Deal cards
         const DEAL_INTERVAL = 50;
         for (let i = 0; i < this.allCards.length; i++) {
@@ -439,6 +476,8 @@ export class GameScene extends Scene {
                 CardSuit.CLUBS
             );
             console.log("Player 0 wijs", wijs);
+
+            this.playerShouldOffer((this.dealerPlayerIndex + 1) % 4);
         });
     }
 
@@ -473,10 +512,7 @@ export class GameScene extends Scene {
         this.dropZoneCollection.spacing = 140;
 
         this.input.keyboard!.on("keydown-A", () => {
-            this.returnCardsToDealerDeck();
-            this.time.delayedCall(250, () => {
-                this.dealCards();
-            });
+            this.returnCardsToDealerDeckAndDeal();
         });
 
         // let counter = 0;
@@ -548,10 +584,65 @@ export class GameScene extends Scene {
             .setOrigin(0.5)
             .setDepth(2);
 
+        this.shuffleCards();
         this.dealCards();
 
         EventBus.emit("current-scene-ready", this);
     }
+
+    playerShouldOffer(playerIndex: number) {
+        if (playerIndex === 0) {
+            // Local player
+            // let input = prompt("Hoevee wil je bieden?");
+            let input = "110";
+
+            let offer = input ? parseInt(input) : null;
+            this.players[playerIndex].offered = offer;
+
+            console.log("Player %d offers %s", playerIndex, String(offer));
+
+            // this.playerShouldOffer((playerIndex + 1) % 4);
+        } else {
+            // Is bot
+
+            // TODO: Calculate offer
+            let offer = null;
+            this.players[playerIndex].offered = offer;
+
+            console.log("Player %d offers %s", playerIndex, String(offer));
+
+            // this.playerShouldOffer((playerIndex + 1) % 4);
+        }
+
+        if (playerIndex == this.dealerPlayerIndex) {
+            console.log("All players offered, start");
+            let highestOfferPlayer: Player | null = null;
+            this.players.forEach((player) => {
+                if (player.offered !== null) {
+                    if (
+                        highestOfferPlayer === null ||
+                        player.offered > highestOfferPlayer.offered!
+                    ) {
+                        highestOfferPlayer = player;
+                    }
+                }
+            });
+
+            if (highestOfferPlayer === null) {
+                console.log("Nobody proposed an offer");
+                alert("Niemand heeft geboden! Opnieuw schudden");
+                this.returnCardsToDealerDeckAndDeal();
+            } else {
+                console.log("Player has the highest offer", highestOfferPlayer);
+                this.playerShouldPlay((highestOfferPlayer as Player).index);
+            }
+            return;
+        } else {
+            this.playerShouldOffer((playerIndex + 1) % 4);
+        }
+    }
+
+    playerShouldPlay(playerIndex: number) {}
 
     update(time: number, delta: number): void {
         // console.log("update");
