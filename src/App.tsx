@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 import { IRefPhaserGame, PhaserGame } from "./game/PhaserGame";
-import { MainMenu } from "./game/scenes/MainMenu";
+import { GameScene } from "./game/scenes/GameScene";
 
 function App() {
     // The sprite can only be moved in the MainMenu Scene
@@ -12,7 +12,7 @@ function App() {
 
     const moveSprite = () => {
         if (phaserRef.current) {
-            const scene = phaserRef.current.scene as MainMenu;
+            const scene = phaserRef.current.scene as GameScene;
 
             // if (scene && scene.scene.key === "MainMenu") {
             //     // Get the update logo position
