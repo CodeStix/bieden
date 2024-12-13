@@ -2,22 +2,47 @@ import { GameObjects, Scene } from "phaser";
 
 import { EventBus } from "../EventBus";
 
+const CARD_SCALE = 2;
+
 export class MainMenu extends Scene {
-    background: GameObjects.Image;
-    logo: GameObjects.Image;
-    title: GameObjects.Text;
-    logoTween: Phaser.Tweens.Tween | null;
+    currentlyDragging!: Phaser.GameObjects.Sprite;
 
     constructor() {
         super("MainMenu");
     }
 
+    preload() {
+        this.load.spritesheet("card", "assets/cards.png", {
+            frameWidth: 72,
+            frameHeight: 96,
+        });
+    }
+
     create() {
-        this.background = this.add.image(512, 384, "background");
+        for (let i = 0; i < 8; i++) {
+            let card = this.add
+                .sprite(i * 80 + 72 / 2, 96 / 2, "card", i)
+                .setScale(CARD_SCALE)
+                .setInteractive({
+                    draggable: true,
+                } as Phaser.Types.Input.InputConfiguration);
 
-        this.logo = this.add.image(512, 300, "logo").setDepth(100);
+            card.on("dragstart", () => {
+                console.log("on start dragging card");
+                this.currentlyDragging = card;
+                card.scale = CARD_SCALE + 0.5;
+            });
+            card.on("drag", (_ev: any, x: number, y: number) => {
+                card.x = x;
+                card.y = y;
+            });
+            card.on("dragend", () => {
+                card.scale = CARD_SCALE;
+            });
+        }
+        // this.add.sprite(30, 60, "card", 10);
 
-        this.title = this.add
+        let title = this.add
             .text(512, 460, "Main Menu", {
                 fontFamily: "Arial Black",
                 fontSize: 38,
@@ -32,39 +57,8 @@ export class MainMenu extends Scene {
         EventBus.emit("current-scene-ready", this);
     }
 
-    changeScene() {
-        if (this.logoTween) {
-            this.logoTween.stop();
-            this.logoTween = null;
-        }
-
-        this.scene.start("Game");
-    }
-
-    moveLogo(vueCallback: ({ x, y }: { x: number; y: number }) => void) {
-        if (this.logoTween) {
-            if (this.logoTween.isPlaying()) {
-                this.logoTween.pause();
-            } else {
-                this.logoTween.play();
-            }
-        } else {
-            this.logoTween = this.tweens.add({
-                targets: this.logo,
-                x: { value: 750, duration: 3000, ease: "Back.easeInOut" },
-                y: { value: 80, duration: 1500, ease: "Sine.easeOut" },
-                yoyo: true,
-                repeat: -1,
-                onUpdate: () => {
-                    if (vueCallback) {
-                        vueCallback({
-                            x: Math.floor(this.logo.x),
-                            y: Math.floor(this.logo.y),
-                        });
-                    }
-                },
-            });
-        }
+    update(time: number, delta: number): void {
+        // console.log("update");
     }
 }
 
