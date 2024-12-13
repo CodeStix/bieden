@@ -118,6 +118,10 @@ class Card extends Phaser.GameObjects.Sprite {
             ease: Phaser.Math.Easing.Cubic.Out,
         });
     }
+
+    toString() {
+        return `${this.value} of ${CardSuit[this.suit]}`;
+    }
 }
 
 export class CardCollection {
@@ -138,6 +142,17 @@ export class CardCollection {
         this.cards = [];
     }
 
+    removeCard(card: Card) {
+        let idx = this.cards.indexOf(card);
+        if (idx < 0) {
+            console.error("Card to remove from collection not found");
+            return;
+        } else {
+            this.cards.splice(idx, 1);
+        }
+        this.updateCardPositions();
+    }
+
     addCard(card: Card, updateCardPositions = true) {
         if (this.cards.some((e) => e === card)) {
             return;
@@ -147,15 +162,16 @@ export class CardCollection {
         this.positionsWhenDropped.set(card, [card.x, card.y, card.angle]);
 
         if (card.currentlyInCollection) {
-            let idx = card.currentlyInCollection.cards.indexOf(card);
-            if (idx < 0) {
-                console.error(
-                    "Card removed from collection but not found in cards array"
-                );
-            } else {
-                card.currentlyInCollection.cards.splice(idx, 1);
-            }
-            card.currentlyInCollection.updateCardPositions();
+            card.currentlyInCollection.removeCard(card);
+            // let idx = card.currentlyInCollection.cards.indexOf(card);
+            // if (idx < 0) {
+            //     console.error(
+            //         "Card removed from collection but not found in cards array"
+            //     );
+            // } else {
+            //     card.currentlyInCollection.cards.splice(idx, 1);
+            // }
+            // card.currentlyInCollection.updateCardPositions();
         }
         card.currentlyInCollection = this;
 
@@ -216,6 +232,123 @@ export class CardCollection {
     }
 }
 
+function getCardScore(card: Card, isTroef: boolean) {
+    switch (card.value) {
+        case 14: // ace
+            return 11;
+        case 13: // king
+            return 3;
+        case 12: // queen
+            return 2;
+        case 11: // jack
+            return isTroef ? 20 : 1;
+        case 10:
+            return 10;
+        case 9:
+            return isTroef ? 14 : 0;
+        case 8:
+        case 7:
+            return 0;
+        default:
+            console.error("Invalid card value", card.value);
+            return 0;
+    }
+}
+
+function getNameForValue(value: number, multiple: boolean) {
+    switch (value) {
+        case 11:
+            return multiple ? "zotten" : "zot";
+        case 12:
+            return multiple ? "wijven" : "vrouw";
+        case 13:
+            return multiple ? "heren" : "heer";
+        case 14:
+            return multiple ? "azen" : "aas";
+        default:
+            return String(value);
+    }
+}
+
+class Wijs {
+    constructor(
+        public name: string,
+        public points: number,
+        public cards: Card[]
+    ) {}
+}
+
+function calculateWijs(cards: Card[], troef: CardSuit): Wijs[] {
+    let wijs: Wijs[] = [];
+
+    // Find sequences
+    // 3 sequential cards -> +20
+    // 4 sequential cards -> +50
+    // 5 sequential cards -> +100
+    cards = [...cards];
+    cards.sort((a, b) => (a.suit - b.suit) * 100 + a.value - b.value);
+    let seqLen = 0;
+    let seqCards: Card[] = [];
+    for (let i = 0; i < cards.length; i++) {
+        let card = cards[i];
+        let nextCard = i + 1 == cards.length ? null : cards[i + 1];
+
+        seqCards.push(card);
+        seqLen += 1;
+
+        if (
+            !nextCard ||
+            card.suit != nextCard.suit ||
+            card.value !== nextCard.value - 1
+        ) {
+            // Sequence got broken
+
+            console.log(
+                "seq broke",
+                seqLen,
+                seqCards.map((e) => e.toString())
+            );
+
+            let wijsName = seqLen + " op een rij";
+            if (seqLen >= 5) {
+                wijs.push(new Wijs(wijsName, 100, seqCards));
+            } else if (seqLen === 4) {
+                wijs.push(new Wijs(wijsName, 50, seqCards));
+            } else if (seqLen === 3) {
+                wijs.push(new Wijs(wijsName, 20, seqCards));
+            }
+
+            seqLen = 0;
+            seqCards = [];
+        }
+    }
+
+    // Marriage
+    // king + queen if troef -> +20
+    let troefQueen = cards.find((e) => e.value == 12 && e.suit == troef);
+    let troefKing = cards.find((e) => e.value == 13 && e.suit == troef);
+    if (troefQueen && troefKing) {
+        wijs.push(new Wijs("Marriage", 20, [troefQueen, troefKing]));
+    }
+
+    // 4 jacks -> +200
+    // 4 queens/kings/aces -> +100
+    [11, 12, 13, 14].forEach((v) => {
+        let same = cards.filter((e) => e.value == v);
+        if (same.length === 4) {
+            wijs.push(
+                new Wijs(
+                    "4 " + getNameForValue(v, true),
+                    v == 11 ? 200 : 100,
+                    same
+                )
+            );
+        }
+    });
+
+    return wijs;
+}
+
 export class Player {
     hand: CardCollection;
 
@@ -260,6 +393,55 @@ export class GameScene extends Scene {
         });
     }
 
+    returnCardsToDealerDeck() {
+        for (let i = 0; i < this.allCards.length; i++) {
+            let card = this.allCards[i];
+            if (card.currentlyInCollection) {
+                card.currentlyInCollection.removeCard(card);
+                card.currentlyInCollection = undefined;
+            }
+            card.moveTo(window.innerWidth / 2, window.innerHeight / 2, 0);
+            card.setDepth(10 + i);
+            card.setFaceDown(true);
+        }
+    }
+
+    shuffleCards() {
+        // Shuffle
+        for (let i = 0; i < this.allCards.length; i++) {
+            let r = Math.floor(Math.random() * this.allCards.length);
+            let t = this.allCards[i];
+            this.allCards[i] = this.allCards[r];
+            this.allCards[r] = t;
+        }
+    }
+
+    dealCards() {
+        this.shuffleCards();
+
+        // Deal cards
+        const DEAL_INTERVAL = 50;
+        for (let i = 0; i < this.allCards.length; i++) {
+            this.time.delayedCall(i * DEAL_INTERVAL, () => {
+                let card = this.allCards[i];
+                let targetPlayerIdx = Math.floor((i / 4) % 4);
+                if (targetPlayerIdx == 0) card.setFaceDown(false);
+                this.players[targetPlayerIdx].hand.addCard(card);
+            });
+        }
+
+        this.time.delayedCall(this.allCards.length * DEAL_INTERVAL, () => {
+            this.players[0].hand.sortCards();
+
+            console.log("All cards are dealt!");
+            let wijs = calculateWijs(
+                this.players[0].hand.cards,
+                CardSuit.CLUBS
+            );
+            console.log("Player 0 wijs", wijs);
+        });
+    }
+
     create() {
         this.players = [];
         for (let i = 0; i < 4; i++) {
@@ -282,29 +464,6 @@ export class GameScene extends Scene {
             }
         }
 
-        // Shuffle
-        for (let i = 0; i < this.allCards.length; i++) {
-            let r = Math.floor(Math.random() * this.allCards.length);
-            let t = this.allCards[i];
-            this.allCards[i] = this.allCards[r];
-            this.allCards[r] = t;
-        }
-
-        // Deal cards
-        const DEAL_INTERVAL = 100;
-        for (let i = 0; i < this.allCards.length; i++) {
-            this.time.delayedCall(i * DEAL_INTERVAL, () => {
-                let card = this.allCards[i];
-                let targetPlayerIdx = Math.floor((i / 4) % 4);
-                if (targetPlayerIdx == 0) card.setFaceDown(false);
-                this.players[targetPlayerIdx].hand.addCard(card);
-            });
-        }
-
-        this.time.delayedCall(this.allCards.length * DEAL_INTERVAL, () => {
-            this.players[0].hand.sortCards();
-        });
-
         this.dropZoneCollection = new CardCollection(
             "radial",
             window.innerWidth / 2,
@@ -313,8 +472,14 @@ export class GameScene extends Scene {
         );
         this.dropZoneCollection.spacing = 140;
 
-        let counter = 0;
+        this.input.keyboard!.on("keydown-A", () => {
+            this.returnCardsToDealerDeck();
+            this.time.delayedCall(250, () => {
+                this.dealCards();
+            });
+        });
 
+        // let counter = 0;
         // this.input.keyboard!.on("keydown-A", () => {
         //     for (let i = 0; i < 4; i++) {
         //         let card = new Card(
@@ -359,7 +524,7 @@ export class GameScene extends Scene {
 
         this.input.on("drop", (_ev: any, dropped: any, droppedOn: any) => {
             if (dropped instanceof Card && this.dropZone == droppedOn) {
-                console.log("card got dropped on dropzone", dropped);
+                // console.log("card got dropped on dropzone", dropped);
                 this.dropZoneCollection.addCard(dropped, false);
             }
         });
@@ -382,6 +547,8 @@ export class GameScene extends Scene {
             )
             .setOrigin(0.5)
             .setDepth(2);
+
+        this.dealCards();
 
         EventBus.emit("current-scene-ready", this);
     }
