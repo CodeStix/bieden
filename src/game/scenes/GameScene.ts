@@ -46,7 +46,7 @@ class Card extends Phaser.GameObjects.Sprite {
         this.on("dragstart", () => {
             // this.scale = CARD_SCALE + 0.5;
             this.depth = 100;
-            this.setFaceDown(false);
+            // this.setFaceDown(false);
         });
         this.on("drag", (_ev: any, x: number, y: number) => {
             this.x = x;
@@ -54,12 +54,16 @@ class Card extends Phaser.GameObjects.Sprite {
         });
         this.on("dragend", () => {
             // this.scale = CARD_SCALE;
-            this.depth = 1;
-            this.setFaceDown(true);
+            this.depth = 10;
+            // this.setFaceDown(true);
+            this.currentlyInCollection?.updateCardPositions();
+        });
+        this.on("drop", () => {
+            console.log("drop card", this);
         });
 
         this.setScale(CARD_SCALE);
-        this.setDepth(1);
+        this.setDepth(10);
         this.setInteractive({
             draggable: true,
         } as Phaser.Types.Input.InputConfiguration);
@@ -105,14 +109,29 @@ class Card extends Phaser.GameObjects.Sprite {
 
 export class CardCollection {
     cards: Card[];
-    spacing = 50;
+    spacing = 80;
+    anglePerCard = 3;
+    type: "hand" | "radial";
 
-    constructor(public x: number, public y: number, public angle: number) {
+    private positionsWhenDropped = new Map<Card, [number, number, number]>();
+
+    constructor(
+        type: "hand" | "radial",
+        public x: number,
+        public y: number,
+        public angle: number
+    ) {
+        this.type = type;
         this.cards = [];
     }
 
-    addCard(card: Card) {
+    addCard(card: Card, updateCardPositions = true) {
+        if (this.cards.some((e) => e === card)) {
+            return;
+        }
+
         this.cards.push(card);
+        this.positionsWhenDropped.set(card, [card.x, card.y, card.angle]);
 
         if (card.currentlyInCollection) {
             let idx = card.currentlyInCollection.cards.indexOf(card);
@@ -123,29 +142,68 @@ export class CardCollection {
             } else {
                 card.currentlyInCollection.cards.splice(idx, 1);
             }
+            card.currentlyInCollection.updateCardPositions();
         }
         card.currentlyInCollection = this;
 
-        this.updateCardPositions();
+        if (updateCardPositions) this.updateCardPositions();
     }
 
-    private updateCardPositions() {
-        for (let i = 0; i < this.cards.length; i++) {
-            let card = this.cards[i];
-            card.moveTo(
-                this.x +
+    updateCardPositions() {
+        if (this.type == "hand") {
+            for (let i = 0; i < this.cards.length; i++) {
+                let card = this.cards[i];
+                let posDelta =
                     i * this.spacing -
-                    (this.cards.length * this.spacing) / 2,
-                this.y,
-                this.angle
-            );
-            card.setDepth(10 + i);
+                    ((this.cards.length - 1) * this.spacing) / 2;
+                let angleDelta =
+                    i * this.anglePerCard -
+                    ((this.cards.length - 1) * this.anglePerCard) / 2;
+                let newAngle = this.angle + angleDelta;
+                card.moveTo(
+                    this.x +
+                        posDelta * Math.cos((newAngle / 360) * Math.PI * 2),
+                    this.y +
+                        posDelta * Math.sin((newAngle / 360) * Math.PI * 2),
+                    newAngle,
+                    i * 0.1
+                );
+                card.setDepth(10 + i);
+            }
+        } else if (this.type == "radial") {
+            for (let i = 0; i < this.cards.length; i++) {
+                let card = this.cards[i];
+                // let [x, y, a] = this.positionsWhenDropped.get(card)!;
+                card.moveTo(
+                    this.x +
+                        Math.cos(
+                            ((card.angle + this.angle) / 360) * Math.PI * 2
+                        ) *
+                            this.spacing,
+                    this.y +
+                        Math.sin(
+                            ((card.angle + this.angle) / 360) * Math.PI * 2
+                        ) *
+                            this.spacing,
+                    card.angle,
+                    i * 0.1
+                );
+            }
         }
     }
 }
 
 export class Player {
-    constructor(private scene: Scene) {}
+    hand: CardCollection;
+
+    constructor(public scene: Scene, public index: number) {
+        this.hand = new CardCollection(
+            "hand",
+            window.innerWidth / 2,
+            window.innerHeight - 200,
+            index == 3 ? -90 : index * 90
+        );
+    }
 }
 
 export class GameScene extends Scene {
@@ -153,12 +211,17 @@ export class GameScene extends Scene {
     testKey: Phaser.Input.Keyboard.Key;
 
     collection: CardCollection;
+    collection2: CardCollection;
+    dropZone: Phaser.GameObjects.GameObject;
+    dropZoneText: Phaser.GameObjects.Text;
+    dropZoneCollection: CardCollection;
 
     constructor() {
         super("GameScene");
     }
 
     preload() {
+        this.load.image("cards", "assets/cards.png");
         this.load.spritesheet("card", "assets/cards.png", {
             frameWidth: CARD_WIDTH,
             frameHeight: CARD_HEIGHT,
@@ -174,10 +237,26 @@ export class GameScene extends Scene {
         // });
 
         this.collection = new CardCollection(
+            "hand",
             window.innerWidth / 2,
-            window.innerHeight - 100,
+            window.innerHeight - 200,
             0
         );
+
+        this.collection2 = new CardCollection(
+            "hand",
+            200,
+            window.innerHeight / 2,
+            90
+        );
+
+        this.dropZoneCollection = new CardCollection(
+            "radial",
+            window.innerWidth / 2,
+            window.innerHeight / 2,
+            90
+        );
+        this.dropZoneCollection.spacing = 140;
 
         let counter = 0;
 
@@ -191,24 +270,72 @@ export class GameScene extends Scene {
                 false
             );
 
+            let card2 = new Card(
+                this,
+                100,
+                100,
+                Math.floor(counter / 13),
+                (counter % 13) + 1,
+                false
+            );
+
             this.children.add(card);
             this.collection.addCard(card);
+
+            this.children.add(card2);
+            this.collection2.addCard(card2);
             counter++;
+        });
+
+        this.dropZone = this.add
+            .rectangle(
+                window.innerWidth / 2,
+                window.innerHeight / 2,
+                500,
+                500,
+                0x222222
+            )
+            .setDepth(1)
+            .setInteractive({
+                dropZone: true,
+            } as Phaser.Types.Input.InputConfiguration);
+
+        // These don't work (i don't get why?)
+        // this.dropZone.on("dragenter", () => {
+        //     console.log("dragenter");
+        // });
+        // this.dropZone.on("dragleave", () => {
+        //     console.log("dragleave");
+        // });
+        // this.dropZone.on("dragover", (ev: any, x, y) => {
+        //     console.log("dragover", ev, x, y);
+        // });
+
+        this.input.on("drop", (_ev: any, dropped: any, droppedOn: any) => {
+            if (dropped instanceof Card && this.dropZone == droppedOn) {
+                console.log("card got dropped on dropzone", dropped);
+                this.dropZoneCollection.addCard(dropped, false);
+            }
         });
 
         // this.add.sprite(30, 60, "card", 10);
 
-        let title = this.add
-            .text(512, 460, "Main Menu", {
-                fontFamily: "Arial Black",
-                fontSize: 38,
-                color: "#ffffff",
-                stroke: "#000000",
-                strokeThickness: 8,
-                align: "center",
-            })
+        this.dropZoneText = this.add
+            .text(
+                window.innerWidth / 2,
+                window.innerHeight / 2,
+                "Sleep kaart\nhier",
+                {
+                    fontFamily: "Arial Black",
+                    fontSize: 38,
+                    color: "#aaaaaa",
+                    // stroke: "#000000",
+                    // strokeThickness: 8,
+                    align: "center",
+                }
+            )
             .setOrigin(0.5)
-            .setDepth(100);
+            .setDepth(2);
 
         EventBus.emit("current-scene-ready", this);
     }
