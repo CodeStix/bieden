@@ -14,6 +14,19 @@ enum CardSuit {
 }
 const FACE_DOWN_FRAME = 13;
 
+function getCardSuitOrder(suit: CardSuit) {
+    switch (suit) {
+        case CardSuit.CLUBS:
+            return 0;
+        case CardSuit.HEARTS:
+            return 1;
+        case CardSuit.SPADES:
+            return 2;
+        case CardSuit.DIAMONDS:
+            return 3;
+    }
+}
+
 class Card extends Phaser.GameObjects.Sprite {
     private faceFrame: number;
     private isFaceDown: boolean;
@@ -22,7 +35,7 @@ class Card extends Phaser.GameObjects.Sprite {
 
     public currentlyInCollection?: CardCollection;
 
-    // For value, 1 = ace ... 13 = king
+    // For value, 2 = 2 ... 13 = king, 14 = ace
     constructor(
         scene: Scene,
         x: number,
@@ -31,12 +44,12 @@ class Card extends Phaser.GameObjects.Sprite {
         public readonly value: number,
         isFaceDown: boolean
     ) {
-        if (value <= 0 || value > 14) {
+        if (value < 2 || value > 14) {
             console.error("Invalid card value", value);
-            value = 1;
+            value = 2;
         }
 
-        let fr = suit * 14 + (value - 1);
+        let fr = suit * 14 + (value == 14 ? 0 : value - 1);
         super(scene, x, y, "card", isFaceDown ? FACE_DOWN_FRAME : fr);
 
         this.faceFrame = fr;
@@ -72,7 +85,7 @@ class Card extends Phaser.GameObjects.Sprite {
     setFaceDown(faceDown: boolean) {
         if (this.isFaceDown == faceDown) return;
 
-        if (this.flipTween && this.flipTween.isActive()) {
+        if (this.flipTween) {
             this.flipTween.stop();
         }
         this.flipTween = this.scene.tweens.add({
@@ -92,7 +105,7 @@ class Card extends Phaser.GameObjects.Sprite {
     }
 
     moveTo(x: number, y: number, angle: number, delay = 0) {
-        if (this.moveToTween && this.moveToTween.isActive()) {
+        if (this.moveToTween) {
             this.moveToTween.stop();
         }
         this.moveToTween = this.scene.tweens.add({
@@ -191,16 +204,35 @@ export class CardCollection {
             }
         }
     }
+
+    sortCards() {
+        this.cards.sort(
+            (a, b) =>
+                (getCardSuitOrder(a.suit) - getCardSuitOrder(b.suit)) * 100 +
+                a.value -
+                b.value
+        );
+        this.updateCardPositions();
+    }
 }
 
 export class Player {
     hand: CardCollection;
 
     constructor(public scene: Scene, public index: number) {
+        const EDGE_SPACING = 100;
         this.hand = new CardCollection(
             "hand",
-            window.innerWidth / 2,
-            window.innerHeight - 200,
+            index == 0 || index == 2
+                ? window.innerWidth / 2
+                : index == 1
+                ? EDGE_SPACING
+                : window.innerWidth - EDGE_SPACING,
+            index == 1 || index == 3
+                ? window.innerHeight / 2
+                : index == 2
+                ? EDGE_SPACING
+                : window.innerHeight - EDGE_SPACING,
             index == 3 ? -90 : index * 90
         );
     }
@@ -210,8 +242,8 @@ export class GameScene extends Scene {
     currentlyDragging!: Phaser.GameObjects.Sprite;
     testKey: Phaser.Input.Keyboard.Key;
 
-    collection: CardCollection;
-    collection2: CardCollection;
+    allCards: Card[];
+    players: Player[];
     dropZone: Phaser.GameObjects.GameObject;
     dropZoneText: Phaser.GameObjects.Text;
     dropZoneCollection: CardCollection;
@@ -229,26 +261,49 @@ export class GameScene extends Scene {
     }
 
     create() {
-        // this.testKey = this.input.keyboard!.addKey(
-        //     Phaser.Input.Keyboard.KeyCodes.A
-        // );
-        // this.testKey.on("keydown", () => {
-        //     console.log("keydown");
-        // });
+        this.players = [];
+        for (let i = 0; i < 4; i++) {
+            this.players.push(new Player(this, i));
+        }
 
-        this.collection = new CardCollection(
-            "hand",
-            window.innerWidth / 2,
-            window.innerHeight - 200,
-            0
-        );
+        this.allCards = [];
+        for (let s = 0; s < 4; s++) {
+            for (let v = 7; v <= 14; v++) {
+                let card = new Card(
+                    this,
+                    window.innerWidth / 2,
+                    window.innerHeight / 2,
+                    s,
+                    v,
+                    true
+                );
+                this.allCards.push(card);
+                this.children.add(card);
+            }
+        }
 
-        this.collection2 = new CardCollection(
-            "hand",
-            200,
-            window.innerHeight / 2,
-            90
-        );
+        // Shuffle
+        for (let i = 0; i < this.allCards.length; i++) {
+            let r = Math.floor(Math.random() * this.allCards.length);
+            let t = this.allCards[i];
+            this.allCards[i] = this.allCards[r];
+            this.allCards[r] = t;
+        }
+
+        // Deal cards
+        const DEAL_INTERVAL = 100;
+        for (let i = 0; i < this.allCards.length; i++) {
+            this.time.delayedCall(i * DEAL_INTERVAL, () => {
+                let card = this.allCards[i];
+                let targetPlayerIdx = Math.floor((i / 4) % 4);
+                if (targetPlayerIdx == 0) card.setFaceDown(false);
+                this.players[targetPlayerIdx].hand.addCard(card);
+            });
+        }
+
+        this.time.delayedCall(this.allCards.length * DEAL_INTERVAL, () => {
+            this.players[0].hand.sortCards();
+        });
 
         this.dropZoneCollection = new CardCollection(
             "radial",
@@ -260,32 +315,23 @@ export class GameScene extends Scene {
 
         let counter = 0;
 
-        this.input.keyboard!.on("keydown-A", () => {
-            let card = new Card(
-                this,
-                100,
-                100,
-                Math.floor(counter / 13),
-                (counter % 13) + 1,
-                false
-            );
+        // this.input.keyboard!.on("keydown-A", () => {
+        //     for (let i = 0; i < 4; i++) {
+        //         let card = new Card(
+        //             this,
+        //             100,
+        //             100,
+        //             Math.floor(counter / 13),
+        //             (counter % 13) + 2,
+        //             false
+        //         );
 
-            let card2 = new Card(
-                this,
-                100,
-                100,
-                Math.floor(counter / 13),
-                (counter % 13) + 1,
-                false
-            );
+        //         this.children.add(card);
+        //         this.players[i].hand.addCard(card);
+        //     }
 
-            this.children.add(card);
-            this.collection.addCard(card);
-
-            this.children.add(card2);
-            this.collection2.addCard(card2);
-            counter++;
-        });
+        //     counter++;
+        // });
 
         this.dropZone = this.add
             .rectangle(
