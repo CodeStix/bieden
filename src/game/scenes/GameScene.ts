@@ -18,6 +18,9 @@ class Card extends Phaser.GameObjects.Sprite {
     private faceFrame: number;
     private isFaceDown: boolean;
     private flipTween?: Phaser.Tweens.Tween;
+    private moveToTween?: Phaser.Tweens.Tween;
+
+    public currentlyInCollection?: CardCollection;
 
     // For value, 1 = ace ... 13 = king
     constructor(
@@ -35,6 +38,7 @@ class Card extends Phaser.GameObjects.Sprite {
 
         let fr = suit * 14 + (value - 1);
         super(scene, x, y, "card", isFaceDown ? FACE_DOWN_FRAME : fr);
+
         this.faceFrame = fr;
 
         this.isFaceDown = isFaceDown;
@@ -53,6 +57,12 @@ class Card extends Phaser.GameObjects.Sprite {
             this.depth = 1;
             this.setFaceDown(true);
         });
+
+        this.setScale(CARD_SCALE);
+        this.setDepth(1);
+        this.setInteractive({
+            draggable: true,
+        } as Phaser.Types.Input.InputConfiguration);
     }
 
     setFaceDown(faceDown: boolean) {
@@ -66,6 +76,7 @@ class Card extends Phaser.GameObjects.Sprite {
             duration: 100,
             scaleX: 0,
             yoyo: true,
+            ease: Phaser.Math.Easing.Circular.InOut,
             onYoyo: () => {
                 this.setFrame(faceDown ? FACE_DOWN_FRAME : this.faceFrame);
             },
@@ -75,6 +86,62 @@ class Card extends Phaser.GameObjects.Sprite {
         });
         this.isFaceDown = faceDown;
     }
+
+    moveTo(x: number, y: number, angle: number, delay = 0) {
+        if (this.moveToTween && this.moveToTween.isActive()) {
+            this.moveToTween.stop();
+        }
+        this.moveToTween = this.scene.tweens.add({
+            targets: this,
+            duration: 300,
+            x: x,
+            y: y,
+            delay: delay,
+            angle: angle,
+            ease: Phaser.Math.Easing.Cubic.Out,
+        });
+    }
+}
+
+export class CardCollection {
+    cards: Card[];
+    spacing = 50;
+
+    constructor(public x: number, public y: number, public angle: number) {
+        this.cards = [];
+    }
+
+    addCard(card: Card) {
+        this.cards.push(card);
+
+        if (card.currentlyInCollection) {
+            let idx = card.currentlyInCollection.cards.indexOf(card);
+            if (idx < 0) {
+                console.error(
+                    "Card removed from collection but not found in cards array"
+                );
+            } else {
+                card.currentlyInCollection.cards.splice(idx, 1);
+            }
+        }
+        card.currentlyInCollection = this;
+
+        this.updateCardPositions();
+    }
+
+    private updateCardPositions() {
+        for (let i = 0; i < this.cards.length; i++) {
+            let card = this.cards[i];
+            card.moveTo(
+                this.x +
+                    i * this.spacing -
+                    (this.cards.length * this.spacing) / 2,
+                this.y,
+                this.angle
+            );
+            card.setDepth(10 + i);
+        }
+    }
 }
 
 export class Player {
@@ -83,6 +150,9 @@ export class Player {
 
 export class GameScene extends Scene {
     currentlyDragging!: Phaser.GameObjects.Sprite;
+    testKey: Phaser.Input.Keyboard.Key;
+
+    collection: CardCollection;
 
     constructor() {
         super("GameScene");
@@ -96,23 +166,36 @@ export class GameScene extends Scene {
     }
 
     create() {
-        for (let i = 0; i < 8; i++) {
+        // this.testKey = this.input.keyboard!.addKey(
+        //     Phaser.Input.Keyboard.KeyCodes.A
+        // );
+        // this.testKey.on("keydown", () => {
+        //     console.log("keydown");
+        // });
+
+        this.collection = new CardCollection(
+            window.innerWidth / 2,
+            window.innerHeight - 100,
+            0
+        );
+
+        let counter = 0;
+
+        this.input.keyboard!.on("keydown-A", () => {
             let card = new Card(
                 this,
-                100 + i * CARD_WIDTH * CARD_SCALE,
                 100,
-                CardSuit.DIAMONDS,
-                i + 1,
-                i % 2 == 0
-            )
-                .setScale(CARD_SCALE)
-                .setDepth(1)
-                .setInteractive({
-                    draggable: true,
-                } as Phaser.Types.Input.InputConfiguration);
+                100,
+                Math.floor(counter / 13),
+                (counter % 13) + 1,
+                false
+            );
+
             this.children.add(card);
-            // card.setFaceDown();
-        }
+            this.collection.addCard(card);
+            counter++;
+        });
+
         // this.add.sprite(30, 60, "card", 10);
 
         let title = this.add
