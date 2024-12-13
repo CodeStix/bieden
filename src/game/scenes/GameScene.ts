@@ -270,16 +270,80 @@ function getNameForValue(value: number, multiple: boolean) {
     }
 }
 
-class Wijs {
-    constructor(
-        public name: string,
-        public points: number,
-        public cards: Card[]
-    ) {}
+interface IWijs {
+    countsIfTroef(troef: CardSuit): boolean;
+    getScore(): number;
+    getCards(): Card[];
+    toString(): string;
 }
 
-function calculateWijs(cards: Card[], troef: CardSuit): Wijs[] {
-    let wijs: Wijs[] = [];
+class CarreWijs implements IWijs {
+    constructor(public cards: Card[]) {}
+
+    getCards(): Card[] {
+        return this.cards;
+    }
+
+    toString(): string {
+        return (
+            this.cards.length + " " + getNameForValue(this.cards[0].value, true)
+        );
+    }
+
+    countsIfTroef(_troef: CardSuit): boolean {
+        return true;
+    }
+
+    getScore(): number {
+        return this.cards[0].value === 11 ? 200 : 100;
+    }
+}
+
+class SequenceWijs implements IWijs {
+    constructor(public cards: Card[]) {}
+
+    getCards(): Card[] {
+        return this.cards;
+    }
+
+    toString(): string {
+        return this.cards.length + " op een rij";
+    }
+
+    getScore(): number {
+        if (this.cards.length >= 5) return 100;
+        if (this.cards.length == 4) return 50;
+        if (this.cards.length == 3) return 20;
+        return 0;
+    }
+
+    countsIfTroef(_troef: CardSuit): boolean {
+        return true;
+    }
+}
+
+class MarriageWijs implements IWijs {
+    constructor(public cards: Card[]) {}
+
+    countsIfTroef(troef: CardSuit): boolean {
+        return this.cards[0].suit === troef;
+    }
+
+    getScore(): number {
+        return 20;
+    }
+
+    toString(): string {
+        return "Marriage";
+    }
+
+    getCards(): Card[] {
+        return this.cards;
+    }
+}
+
+function calculateWijs(cards: Card[]): IWijs[] {
+    let wijs: IWijs[] = [];
 
     // Find sequences
     // 3 sequential cards -> +20
@@ -287,14 +351,12 @@ function calculateWijs(cards: Card[], troef: CardSuit): Wijs[] {
     // 5 sequential cards -> +100
     cards = [...cards];
     cards.sort((a, b) => (a.suit - b.suit) * 100 + a.value - b.value);
-    let seqLen = 0;
     let seqCards: Card[] = [];
     for (let i = 0; i < cards.length; i++) {
         let card = cards[i];
         let nextCard = i + 1 == cards.length ? null : cards[i + 1];
 
         seqCards.push(card);
-        seqLen += 1;
 
         if (
             !nextCard ||
@@ -308,26 +370,18 @@ function calculateWijs(cards: Card[], troef: CardSuit): Wijs[] {
             //     seqCards.map((e) => e.toString())
             // );
 
-            let wijsName = seqLen + " op een rij";
-            if (seqLen >= 5) {
-                wijs.push(new Wijs(wijsName, 100, seqCards));
-            } else if (seqLen === 4) {
-                wijs.push(new Wijs(wijsName, 50, seqCards));
-            } else if (seqLen === 3) {
-                wijs.push(new Wijs(wijsName, 20, seqCards));
-            }
-
-            seqLen = 0;
+            if (seqCards.length >= 3) wijs.push(new SequenceWijs(seqCards));
             seqCards = [];
         }
     }
 
     // Marriage
     // king + queen if troef -> +20
-    let troefQueen = cards.find((e) => e.value == 12 && e.suit == troef);
-    let troefKing = cards.find((e) => e.value == 13 && e.suit == troef);
+    let troefQueen = cards.find((e) => e.value == 12);
+    let troefKing = cards.find((e) => e.value == 13);
     if (troefQueen && troefKing) {
-        wijs.push(new Wijs("Marriage", 20, [troefQueen, troefKing]));
+        wijs.push(new MarriageWijs([troefQueen, troefKing]));
+        // wijs.push(new Wijs("Marriage", 20, [troefQueen, troefKing]));
     }
 
     // 4 jacks -> +200
@@ -335,22 +389,63 @@ function calculateWijs(cards: Card[], troef: CardSuit): Wijs[] {
     [11, 12, 13, 14].forEach((v) => {
         let same = cards.filter((e) => e.value == v);
         if (same.length === 4) {
-            wijs.push(
-                new Wijs(
-                    "4 " + getNameForValue(v, true),
-                    v == 11 ? 200 : 100,
-                    same
-                )
-            );
+            wijs.push(new CarreWijs(same));
         }
     });
 
     return wijs;
 }
 
+function getWijsScore(wijs: IWijs[], troef: CardSuit) {
+    let sum = 0;
+    wijs.forEach((w) => {
+        if (w.countsIfTroef(troef)) {
+            sum += w.getScore();
+        }
+    });
+    return sum;
+}
+
+function getRecommendedOffer(
+    cards: Card[],
+    playerPosition: number
+): [CardSuit, number] | null {
+    let wijs = calculateWijs(cards);
+
+    let bestSuit: CardSuit = CardSuit.CLUBS;
+    let bestSuitScore = 0;
+    for (let suit = 0; suit < 4; suit++) {
+        let score = getWijsScore(wijs, suit);
+
+        console.log("Suit score", score, CardSuit[suit]);
+        if (score > bestSuitScore) {
+            bestSuit = suit;
+            bestSuitScore = score;
+        }
+    }
+
+    // let sequence = wijs.find(
+    //     (e) => e instanceof SequenceWijs && e.cards.length >= 4
+    // ) as SequenceWijs | undefined;
+    // if (sequence) {
+    //     return sequence.cards.some((e) => e.value === 11) ? 150 : 120;
+    // }
+
+    // TODO add rules here
+
+    let offer = 60 + bestSuitScore;
+    offer = Math.floor(offer / 10) * 10;
+    if (offer >= 100) {
+        return [bestSuit, offer];
+    } else {
+        return null;
+    }
+}
+
 export class Player {
     hand: CardCollection;
     offered: number | null = null;
+    shouldStartWith: CardSuit | null = null;
 
     constructor(public scene: Scene, public index: number) {
         const EDGE_SPACING = 100;
@@ -462,7 +557,7 @@ export class GameScene extends Scene {
             this.time.delayedCall(i * DEAL_INTERVAL, () => {
                 let card = this.allCards[i];
                 let targetPlayerIdx = Math.floor((i / 4) % 4);
-                if (targetPlayerIdx == 0) card.setFaceDown(false);
+                if (true || targetPlayerIdx == 0) card.setFaceDown(false);
                 this.players[targetPlayerIdx].hand.addCard(card);
             });
         }
@@ -471,10 +566,7 @@ export class GameScene extends Scene {
             this.players[0].hand.sortCards();
 
             console.log("All cards are dealt!");
-            let wijs = calculateWijs(
-                this.players[0].hand.cards,
-                CardSuit.CLUBS
-            );
+            let wijs = calculateWijs(this.players[0].hand.cards);
             console.log("Player 0 wijs", wijs);
 
             this.playerShouldOffer((this.dealerPlayerIndex + 1) % 4);
@@ -591,28 +683,30 @@ export class GameScene extends Scene {
     }
 
     playerShouldOffer(playerIndex: number) {
-        if (playerIndex === 0) {
-            // Local player
-            // let input = prompt("Hoevee wil je bieden?");
-            let input = "110";
+        let playerPosition = (this.dealerPlayerIndex + playerIndex + 3) % 4;
+        let player = this.players[playerIndex];
 
-            let offer = input ? parseInt(input) : null;
-            this.players[playerIndex].offered = offer;
+        let recommendedOffer = getRecommendedOffer(
+            player.hand.cards,
+            playerPosition
+        );
 
-            console.log("Player %d offers %s", playerIndex, String(offer));
-
-            // this.playerShouldOffer((playerIndex + 1) % 4);
+        if (recommendedOffer != null) {
+            player.shouldStartWith = recommendedOffer[0];
+            player.offered = recommendedOffer[1];
         } else {
-            // Is bot
-
-            // TODO: Calculate offer
-            let offer = null;
-            this.players[playerIndex].offered = offer;
-
-            console.log("Player %d offers %s", playerIndex, String(offer));
-
-            // this.playerShouldOffer((playerIndex + 1) % 4);
+            player.shouldStartWith = null;
+            player.offered = null;
         }
+
+        console.log(
+            "Player %d offers %s (should start with %s)",
+            playerIndex,
+            player.offered,
+            player.shouldStartWith
+                ? CardSuit[player.shouldStartWith]
+                : "nothing"
+        );
 
         if (playerIndex == this.dealerPlayerIndex) {
             console.log("All players offered, start");
@@ -630,8 +724,8 @@ export class GameScene extends Scene {
 
             if (highestOfferPlayer === null) {
                 console.log("Nobody proposed an offer");
-                alert("Niemand heeft geboden! Opnieuw schudden");
-                this.returnCardsToDealerDeckAndDeal();
+                // alert("Niemand heeft geboden! Opnieuw schudden");
+                // this.returnCardsToDealerDeckAndDeal();
             } else {
                 console.log("Player has the highest offer", highestOfferPlayer);
                 this.playerShouldPlay((highestOfferPlayer as Player).index);
