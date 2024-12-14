@@ -619,13 +619,13 @@ export class Player {
             index == 0 || index == 2
                 ? window.innerWidth / 2
                 : index == 1
-                ? WON_EDGE_SPACING
-                : window.innerWidth - WON_EDGE_SPACING,
+                ? window.innerWidth / 2 - WON_EDGE_SPACING
+                : window.innerWidth / 2 + WON_EDGE_SPACING,
             index == 1 || index == 3
                 ? window.innerHeight / 2
                 : index == 2
-                ? WON_EDGE_SPACING
-                : window.innerHeight - WON_EDGE_SPACING,
+                ? window.innerHeight / 2 - WON_EDGE_SPACING
+                : window.innerHeight / 2 + WON_EDGE_SPACING,
             index == 3 ? -90 : index * 90
         );
         this.wonCards.cardScale = 1;
@@ -782,7 +782,7 @@ export class GameScene extends Scene {
     dropZoneCollection: CardCollection;
     // team1Cards: CardCollection;
     // team2Cards: CardCollection;
-
+    playerTurnTriangle: Phaser.GameObjects.Shape;
     dealerPlayerIndex = 0;
     turnPlayerIndex = 0;
     startedTurnPlayerIndex = 0;
@@ -954,6 +954,29 @@ export class GameScene extends Scene {
         );
         this.dropZoneCollection.spacing = 150;
 
+        this.playerTurnTriangle = this.add.triangle(
+            window.innerWidth / 2,
+            window.innerHeight / 2,
+            0 + 30,
+            30 + 30,
+            -30 + 30,
+            -30 + 30,
+            30 + 30,
+            -30 + 30,
+            0xbbbbbb
+        );
+        // this.playerTurnTriangle = this.add.rectangle(
+        //     window.innerWidth / 2,
+        //     window.innerHeight / 2,
+        //     60,
+        //     60,
+
+        //     0xaaaaaa
+        // );
+        this.playerTurnTriangle.setDepth(20);
+
+        // this.playerTurnTriangle.x
+
         this.input.keyboard!.on("keydown-A", () => {
             this.returnCardsToDealerDeckAndDeal();
         });
@@ -1100,6 +1123,30 @@ export class GameScene extends Scene {
         EventBus.emit("current-scene-ready", this);
     }
 
+    updateCurrentPlayerTriangle(angle: number) {
+        this.tweens.add({
+            targets: this.playerTurnTriangle,
+            duration: 200,
+            angle:
+                this.playerTurnTriangle.angle +
+                Phaser.Math.Angle.ShortestBetween(
+                    this.playerTurnTriangle.angle,
+                    angle
+                ),
+            ease: Phaser.Math.Easing.Back.InOut,
+            onUpdate: (_tween, _target, _key, current) => {
+                const DISTANCE = 280;
+                const ang = current + 90;
+                this.playerTurnTriangle.x =
+                    window.innerWidth / 2 +
+                    Math.cos((ang / 360) * Math.PI * 2) * DISTANCE;
+                this.playerTurnTriangle.y =
+                    window.innerHeight / 2 +
+                    Math.sin((ang / 360) * Math.PI * 2) * DISTANCE;
+            },
+        });
+    }
+
     playCard(player: Player, card: Card) {
         if (player.hand !== card.currentlyInCollection) {
             console.error("Card was played by invalid player");
@@ -1168,6 +1215,7 @@ export class GameScene extends Scene {
                 this.startedTurnPlayerIndex = (
                     highestOfferPlayer as Player
                 ).index;
+
                 this.playerBeginPlay(this.startedTurnPlayerIndex);
             }
             return;
@@ -1176,9 +1224,24 @@ export class GameScene extends Scene {
         }
     }
 
+    playerTriangleAngle = 0;
+
+    setTriangleToPlayer(playerIndex: number) {
+        this.playerTriangleAngle = playerIndex * 90;
+        this.updateCurrentPlayerTriangle(this.playerTriangleAngle);
+    }
+
+    triangleGotoNextPlayer() {
+        this.playerTriangleAngle += 90;
+        if (this.playerTriangleAngle >= 360) this.playerTriangleAngle = 0;
+        this.updateCurrentPlayerTriangle(this.playerTriangleAngle);
+    }
+
     playerBeginPlay(playerIndex: number) {
         this.turnPlayerIndex = playerIndex;
         const player = this.players[playerIndex];
+
+        this.setTriangleToPlayer(playerIndex);
 
         const recommendedCard = player.getRecommendedPlayCard(
             this.dropZoneCollection.cards,
@@ -1200,7 +1263,9 @@ export class GameScene extends Scene {
         //     this.troef = player.shouldStartWith!;
         // }
 
-        this.playCard(player, recommendedCard);
+        this.time.delayedCall(500, () => {
+            this.playCard(player, recommendedCard);
+        });
     }
 
     update(time: number, delta: number): void {
