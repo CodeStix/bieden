@@ -105,7 +105,7 @@ class Card extends Phaser.GameObjects.Sprite {
         this.isFaceDown = faceDown;
     }
 
-    moveTo(x: number, y: number, angle: number, delay = 0) {
+    moveTo(x: number, y: number, angle: number, delay = 0, scale = CARD_SCALE) {
         if (this.moveToTween) {
             this.moveToTween.stop();
         }
@@ -117,6 +117,7 @@ class Card extends Phaser.GameObjects.Sprite {
             delay: delay,
             angle: angle,
             ease: Phaser.Math.Easing.Cubic.Out,
+            scale: scale,
         });
     }
 
@@ -130,6 +131,7 @@ export class CardCollection {
     spacing = 80;
     anglePerCard = 3;
     type: "hand" | "radial";
+    cardScale = CARD_SCALE;
 
     private positionsWhenDropped = new Map<Card, [number, number, number]>();
 
@@ -196,7 +198,8 @@ export class CardCollection {
                     this.y +
                         posDelta * Math.sin((newAngle / 360) * Math.PI * 2),
                     newAngle,
-                    i * 0.1
+                    i * 0.1,
+                    this.cardScale
                 );
                 card.setDepth(10 + i);
             }
@@ -216,7 +219,8 @@ export class CardCollection {
                         ) *
                             this.spacing,
                     card.angle,
-                    i * 0.1
+                    i * 0.1,
+                    this.cardScale
                 );
             }
         }
@@ -226,8 +230,8 @@ export class CardCollection {
         this.cards.sort(
             (a, b) =>
                 (getCardSuitOrder(a.suit) - getCardSuitOrder(b.suit)) * 100 +
-                a.value -
-                b.value
+                getCardOrder(a, false) -
+                getCardOrder(b, false)
         );
         this.updateCardPositions();
     }
@@ -480,7 +484,7 @@ function getRecommendedOffer(
 
 function getWinningCard(cards: Card[], troef: CardSuit): [Card, number] {
     let highestPlayedCard = cards[0];
-    let highestPlayedScore = -1;
+    let highestPlayedOrder = -1;
     // let highestPlayedCardIndex = -1;
     if (cards.some((e) => e.suit === troef)) {
         for (let i = 0; i < cards.length; i++) {
@@ -489,10 +493,10 @@ function getWinningCard(cards: Card[], troef: CardSuit): [Card, number] {
                 continue;
             }
 
-            const cardScore = getCardOrder(card, true);
-            if (cardScore > highestPlayedScore) {
+            const order = getCardOrder(card, true);
+            if (order > highestPlayedOrder) {
                 highestPlayedCard = card;
-                highestPlayedScore = cardScore;
+                highestPlayedOrder = order;
                 // highestPlayedCardIndex = i;
             }
         }
@@ -503,16 +507,16 @@ function getWinningCard(cards: Card[], troef: CardSuit): [Card, number] {
                 continue;
             }
 
-            const cardScore = getCardOrder(card, false);
-            if (cardScore > highestPlayedScore) {
+            const order = getCardOrder(card, false);
+            if (order > highestPlayedOrder) {
                 highestPlayedCard = card;
-                highestPlayedScore = cardScore;
+                highestPlayedOrder = order;
                 // highestPlayedCardIndex = i;
             }
         }
     }
 
-    return [highestPlayedCard, highestPlayedScore];
+    return [highestPlayedCard, highestPlayedOrder];
 }
 
 export class Player {
@@ -539,7 +543,7 @@ export class Player {
                 : window.innerHeight - EDGE_SPACING,
             index == 3 ? -90 : index * 90
         );
-        const WON_EDGE_SPACING = 250;
+        const WON_EDGE_SPACING = 300;
         this.wonCards = new CardCollection(
             "hand",
             index == 0 || index == 2
@@ -554,6 +558,7 @@ export class Player {
                 : window.innerHeight - WON_EDGE_SPACING,
             index == 3 ? -90 : index * 90
         );
+        this.wonCards.cardScale = 0.8;
         this.wonCards.spacing = 20;
         this.wonCards.anglePerCard = 0;
 
@@ -564,6 +569,8 @@ export class Player {
             if (
                 player.friendHint === null &&
                 this.isFriend(player) &&
+                this.game.troef !== null &&
+                card.suit !== this.game.troef &&
                 card.value !== 10
             ) {
                 this.friendHint = card;
@@ -594,7 +601,12 @@ export class Player {
             }
 
             const playableCards = [...this.hand.cards];
-            playableCards.sort((a, b) => a.value - b.value);
+            // Put lowest order first
+            playableCards.sort(
+                (a, b) =>
+                    getCardOrder(a, a.suit === troef) -
+                    getCardOrder(b, b.suit === troef)
+            );
             return playableCards[0];
         }
 
@@ -603,7 +615,7 @@ export class Player {
             scoreInCards += getCardScore(e, e.suit === troef);
         });
 
-        const [highestPlayedCard, highestPlayedScore] = getWinningCard(
+        const [highestPlayedCard, highestPlayedOrder] = getWinningCard(
             onCards,
             troef
         );
@@ -612,7 +624,13 @@ export class Player {
             (e) =>
                 (e.suit === troef && highestPlayedCard.suit !== troef) ||
                 (e.suit === highestPlayedCard.suit &&
-                    getCardOrder(e, e.suit === troef) > highestPlayedScore)
+                    getCardOrder(e, e.suit === troef) > highestPlayedOrder)
+        );
+        // Put the highest order first
+        playableWinCards.sort(
+            (a, b) =>
+                getCardOrder(b, b.suit === troef) -
+                getCardOrder(a, a.suit === troef)
         );
 
         let friendWillProbablyWin = false;
@@ -648,15 +666,31 @@ export class Player {
         if (playableCards.length <= 0) {
             playableCards = [...this.hand.cards];
         }
-        playableCards.sort(
-            (a, b) =>
-                (a.value === 10
-                    ? friendWillProbablyWin
-                        ? 0
-                        : 13.5
-                    : a.value) -
-                (b.value === 10 ? (friendWillProbablyWin ? 0 : 13.5) : b.value)
-        );
+        if (friendWillProbablyWin) {
+            // Put card with highest score first
+            playableCards.sort(
+                (a, b) =>
+                    getCardScore(b, b.suit === troef) -
+                    getCardScore(a, a.suit === troef)
+            );
+        } else {
+            // Put card with lowest score first
+            playableCards.sort(
+                (a, b) =>
+                    getCardScore(a, a.suit === troef) -
+                    getCardScore(b, b.suit === troef)
+            );
+        }
+
+        // playableCards.sort(
+        //     (a, b) =>
+        //         (a.value === 10
+        //             ? friendWillProbablyWin
+        //                 ? 0
+        //                 : 13.5
+        //             : a.value) -
+        //         (b.value === 10 ? (friendWillProbablyWin ? 0 : 13.5) : b.value));
+
         return playableCards[0];
     }
 
@@ -891,15 +925,6 @@ export class GameScene extends Scene {
         //     console.log("dragover", ev, x, y);
         // });
 
-        this.input.on("drop", (_ev: any, dropped: any, droppedOn: any) => {
-            if (dropped instanceof Card && this.dropZone == droppedOn) {
-                // console.log("card got dropped on dropzone", dropped);
-                this.playCard(this.players[0], dropped);
-                // this.dropZoneCollection.addCard(dropped, false);
-                // this.events.emit("cardplayed", dropped);
-            }
-        });
-
         // this.add.sprite(30, 60, "card", 10);
 
         this.dropZoneText = this.add
@@ -935,6 +960,63 @@ export class GameScene extends Scene {
             )
             .setOrigin(0.5)
             .setDepth(2);
+
+        this.input.on("drop", (_ev: any, dropped: any, droppedOn: any) => {
+            if (dropped instanceof Card && this.dropZone == droppedOn) {
+                // console.log("card got dropped on dropzone", dropped);
+
+                this.playCard(this.players[0], dropped);
+                // this.dropZoneCollection.addCard(dropped, false);
+                // this.events.emit("cardplayed", dropped);
+            }
+        });
+
+        this.events.on("cardplayed", (player: Player, card: Card) => {
+            if (this.troef === null) {
+                console.warn("Set troef to %s", card.toString());
+                this.troef = card.suit;
+            }
+
+            if (this.dropZoneCollection.cards.length >= 4) {
+                console.log("End of round, who won?");
+                const [highestCard, _highestCardScore] = getWinningCard(
+                    this.dropZoneCollection.cards,
+                    this.troef!
+                );
+
+                console.log(
+                    "getwinningcard %s = %s",
+                    this.dropZoneCollection.cards
+                        .map((e) => e.toString())
+                        .join(","),
+                    highestCard.toString()
+                );
+
+                console.log(
+                    "Player %d won with",
+                    highestCard.originalOwner.index,
+                    highestCard.toString()
+                );
+
+                this.time.delayedCall(1000, () => {
+                    [...this.dropZoneCollection.cards].forEach((card) => {
+                        highestCard.originalOwner.wonCards.addCard(card);
+                    });
+                });
+
+                this.time.delayedCall(2000, () => {
+                    if (highestCard.originalOwner.hand.cards.length <= 0) {
+                        console.log("End of game!");
+                    } else {
+                        this.playerBeginPlay(highestCard.originalOwner.index);
+                    }
+                });
+            } else {
+                this.time.delayedCall(500, () => {
+                    this.playerBeginPlay((this.turnPlayerIndex + 1) % 4);
+                });
+            }
+        });
 
         this.shuffleCards();
         this.dealCards();
@@ -1010,7 +1092,7 @@ export class GameScene extends Scene {
                 this.startedTurnPlayerIndex = (
                     highestOfferPlayer as Player
                 ).index;
-                this.playerShouldPlay(this.startedTurnPlayerIndex);
+                this.playerBeginPlay(this.startedTurnPlayerIndex);
             }
             return;
         } else {
@@ -1018,63 +1100,30 @@ export class GameScene extends Scene {
         }
     }
 
-    playerShouldPlay(playerIndex: number) {
+    playerBeginPlay(playerIndex: number) {
         this.turnPlayerIndex = playerIndex;
         const player = this.players[playerIndex];
 
+        const recommendedCard = player.getRecommendedPlayCard(
+            this.dropZoneCollection.cards,
+            this.troef ?? player.shouldStartWith!
+        );
+
         if (playerIndex === 0) {
             // local player
-        }
-
-        if (this.troef === null) {
-            this.troef = player.shouldStartWith!;
-        }
-
-        const playedCard = player.getRecommendedPlayCard(
-            this.dropZoneCollection.cards,
-            this.troef
-        );
-        this.playCard(player, playedCard);
-
-        if (this.dropZoneCollection.cards.length >= 4) {
-            console.log("End of round, who won?");
-            const [highestCard, _highestCardScore] = getWinningCard(
-                this.dropZoneCollection.cards,
-                this.troef
-            );
-
             console.log(
-                "getwinningcard %s = %s",
-                this.dropZoneCollection.cards
-                    .map((e) => e.toString())
-                    .join(","),
-                highestCard.toString()
+                "Local player should play, recommended card is",
+                recommendedCard.toString()
             );
-
-            console.log(
-                "Player %d won with",
-                highestCard.originalOwner.index,
-                highestCard.toString()
-            );
-
-            this.time.delayedCall(1000, () => {
-                [...this.dropZoneCollection.cards].forEach((card) => {
-                    highestCard.originalOwner.wonCards.addCard(card);
-                });
-            });
-
-            this.time.delayedCall(2000, () => {
-                if (highestCard.originalOwner.hand.cards.length <= 0) {
-                    console.log("End of game!");
-                } else {
-                    this.playerShouldPlay(highestCard.originalOwner.index);
-                }
-            });
-        } else {
-            this.time.delayedCall(500, () => {
-                this.playerShouldPlay((playerIndex + 1) % 4);
-            });
+            return;
         }
+
+        // if (this.troef === null) {
+        //     console.warn("Set troef to", player.shouldStartWith!.toString());
+        //     this.troef = player.shouldStartWith!;
+        // }
+
+        this.playCard(player, recommendedCard);
     }
 
     update(time: number, delta: number): void {
@@ -1082,7 +1131,7 @@ export class GameScene extends Scene {
         super.update(time, delta);
 
         this.troefText.text =
-            "Troef = " + (this.troef ? CardSuit[this.troef] : "?");
+            "Troef = " + (this.troef !== null ? CardSuit[this.troef] : "?");
     }
 }
 
