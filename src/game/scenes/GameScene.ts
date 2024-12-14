@@ -32,6 +32,8 @@ class Card extends Phaser.GameObjects.Sprite {
     private isFaceDown: boolean;
     private flipTween?: Phaser.Tweens.Tween;
     private moveToTween?: Phaser.Tweens.Tween;
+    private markTween?: Phaser.Tweens.Tween;
+    private markerRect: Phaser.GameObjects.Rectangle;
 
     public currentlyInCollection?: CardCollection;
     public originalOwner: Player;
@@ -63,6 +65,11 @@ class Card extends Phaser.GameObjects.Sprite {
             // this.setFaceDown(false);
         });
         this.on("drag", (_ev: any, x: number, y: number) => {
+            if (this.markTween) {
+                this.markTween.stop();
+                this.markTween = undefined;
+            }
+
             this.x = x;
             this.y = y;
         });
@@ -81,10 +88,68 @@ class Card extends Phaser.GameObjects.Sprite {
         this.setInteractive({
             draggable: true,
         } as Phaser.Types.Input.InputConfiguration);
+
+        this.markerRect = this.scene.add.rectangle(
+            this.x,
+            this.y,
+            this.width * this.scale + 20,
+            this.height * this.scale + 20,
+            0xffff00
+        );
+        this.markerRect.setDepth(5);
+        this.markerRect.alpha = 0;
+        this.scene.children.add(this.markerRect);
+    }
+
+    isMarked() {
+        return this.markTween !== undefined;
+    }
+
+    mark(amount = 50, ease = Phaser.Math.Easing.Expo.Out, delay = 0) {
+        // this.scene.tweens.add({
+        //     targets: this.markerRect,
+        //     yoyo: true,
+        //     ease: Phaser.Math.Easing.Sine.InOut,
+        //     alpha: 0.5,
+        //     duration: 500,
+        //     loop: -1,
+        // });
+        if (this.markTween) {
+            this.markTween.stop();
+            this.markTween = undefined;
+        }
+
+        this.markTween = this.scene.tweens.add({
+            targets: this,
+            yoyo: true,
+            ease: ease,
+            y:
+                this.y -
+                Math.sin(((this.angle + 90) / 360) * Math.PI * 2) * amount,
+            x:
+                this.x -
+                Math.cos(((this.angle + 90) / 360) * Math.PI * 2) * amount,
+            duration: 500,
+            loop: -1,
+            startDelay: delay,
+            // loopDelay: 500,
+        });
+    }
+
+    update() {
+        // console.log("Update marker");
+        this.markerRect.x = this.x;
+        this.markerRect.y = this.y;
+        this.markerRect.angle = this.angle;
     }
 
     setFaceDown(faceDown: boolean) {
         if (this.isFaceDown == faceDown) return;
+
+        if (this.markTween) {
+            this.markTween.stop();
+            this.markTween = undefined;
+        }
 
         if (this.flipTween) {
             this.flipTween.stop();
@@ -106,6 +171,11 @@ class Card extends Phaser.GameObjects.Sprite {
     }
 
     moveTo(x: number, y: number, angle: number, delay = 0, scale = CARD_SCALE) {
+        if (this.markTween) {
+            this.markTween.stop();
+            this.markTween = undefined;
+        }
+
         if (this.moveToTween) {
             this.moveToTween.stop();
         }
@@ -543,7 +613,7 @@ export class Player {
                 : window.innerHeight - EDGE_SPACING,
             index == 3 ? -90 : index * 90
         );
-        const WON_EDGE_SPACING = 300;
+        const WON_EDGE_SPACING = 370;
         this.wonCards = new CardCollection(
             "hand",
             index == 0 || index == 2
@@ -558,7 +628,7 @@ export class Player {
                 : window.innerHeight - WON_EDGE_SPACING,
             index == 3 ? -90 : index * 90
         );
-        this.wonCards.cardScale = 0.8;
+        this.wonCards.cardScale = 1;
         this.wonCards.spacing = 20;
         this.wonCards.anglePerCard = 0;
 
@@ -819,15 +889,39 @@ export class GameScene extends Scene {
             });
         }
 
-        this.time.delayedCall(this.allCards.length * DEAL_INTERVAL, () => {
-            this.players[0].hand.sortCards();
+        this.time.delayedCall(
+            this.allCards.length * DEAL_INTERVAL + 100,
+            () => {
+                let helpHandForPlayers = [0, 1, 2, 3];
 
-            console.log("All cards are dealt!");
-            let wijs = calculateWijs(this.players[0].hand.cards);
-            console.log("Player 0 wijs", wijs);
+                helpHandForPlayers.forEach((playerIndex) => {
+                    this.players[playerIndex].hand.sortCards();
 
-            this.playerShouldOffer((this.dealerPlayerIndex + 1) % 4);
-        });
+                    console.log("All cards are dealt!");
+                    let wijs = calculateWijs(
+                        this.players[playerIndex].hand.cards
+                    );
+                    console.log("Player %d wijs", playerIndex, wijs);
+
+                    this.time.delayedCall(500, () => {
+                        wijs.forEach((w, i) => {
+                            if (w instanceof MarriageWijs) {
+                                return;
+                            }
+                            w.getCards().forEach((wijsCard) => {
+                                wijsCard.mark(
+                                    50,
+                                    Phaser.Math.Easing.Cubic.Out,
+                                    i * 100
+                                );
+                            });
+                        });
+                    });
+                });
+
+                // this.playerShouldOffer((this.dealerPlayerIndex + 1) % 4);
+            }
+        );
     }
 
     create() {
@@ -858,25 +952,7 @@ export class GameScene extends Scene {
             window.innerHeight / 2,
             90
         );
-        this.dropZoneCollection.spacing = 140;
-
-        // this.team1Cards = new CardCollection(
-        //     "hand",
-        //     window.innerWidth / 2,
-        //     window.innerHeight - 300,
-        //     0
-        // );
-        // this.team1Cards.anglePerCard = 0;
-        // this.team1Cards.spacing = 15;
-
-        // this.team2Cards = new CardCollection(
-        //     "hand",
-        //     300,
-        //     window.innerHeight / 2,
-        //     90
-        // );
-        // this.team2Cards.anglePerCard = 0;
-        // this.team2Cards.spacing = 15;
+        this.dropZoneCollection.spacing = 150;
 
         this.input.keyboard!.on("keydown-A", () => {
             this.returnCardsToDealerDeckAndDeal();
@@ -1110,10 +1186,11 @@ export class GameScene extends Scene {
         );
 
         if (playerIndex === 0) {
-            // local player
+            // Local player
             console.log(
                 "Local player should play, recommended card is",
-                recommendedCard.toString()
+                recommendedCard.toString(),
+                "For troef: " + CardSuit[this.troef ?? player.shouldStartWith!]
             );
             return;
         }
@@ -1132,6 +1209,10 @@ export class GameScene extends Scene {
 
         this.troefText.text =
             "Troef = " + (this.troef !== null ? CardSuit[this.troef] : "?");
+
+        for (let i = 0; i < this.allCards.length; i++) {
+            this.allCards[i].update();
+        }
     }
 }
 
