@@ -34,6 +34,7 @@ class Card extends Phaser.GameObjects.Sprite {
     private moveToTween?: Phaser.Tweens.Tween;
 
     public currentlyInCollection?: CardCollection;
+    public originalOwner: Player;
 
     // For value, 2 = 2 ... 13 = king, 14 = ace
     constructor(
@@ -255,6 +256,30 @@ function getCardScore(card: Card, isTroef: boolean) {
     }
 }
 
+function getCardOrder(card: Card, isTroef: boolean) {
+    switch (card.value) {
+        case 14: // ace
+            return isTroef ? 5 : 7;
+        case 13: // king
+            return isTroef ? 4 : 6;
+        case 12: // queen
+            return isTroef ? 3 : 5;
+        case 11: // jack
+            return isTroef ? 7 : 4;
+        case 10:
+            return isTroef ? 2 : 3;
+        case 9:
+            return isTroef ? 6 : 2;
+        case 8:
+            return 1;
+        case 7:
+            return 0;
+        default:
+            console.error("Invalid card value", card.value);
+            return 0;
+    }
+}
+
 function getNameForValue(value: number, multiple: boolean) {
     switch (value) {
         case 11:
@@ -377,11 +402,12 @@ function calculateWijs(cards: Card[]): IWijs[] {
 
     // Marriage
     // king + queen if troef -> +20
-    let troefQueen = cards.find((e) => e.value == 12);
-    let troefKing = cards.find((e) => e.value == 13);
-    if (troefQueen && troefKing) {
-        wijs.push(new MarriageWijs([troefQueen, troefKing]));
-        // wijs.push(new Wijs("Marriage", 20, [troefQueen, troefKing]));
+    for (let s = 0; s < 4; s++) {
+        let troefQueen = cards.find((e) => e.value == 12 && e.suit == s);
+        let troefKing = cards.find((e) => e.value == 13 && e.suit == s);
+        if (troefQueen && troefKing) {
+            wijs.push(new MarriageWijs([troefQueen, troefKing]));
+        }
     }
 
     // 4 jacks -> +200
@@ -406,6 +432,16 @@ function getWijsScore(wijs: IWijs[], troef: CardSuit) {
     return sum;
 }
 
+function count<T>(arr: T[], predicate: (value: T) => boolean) {
+    let count = 0;
+    arr.forEach((e) => {
+        if (predicate(e)) {
+            count += 1;
+        }
+    });
+    return count;
+}
+
 function getRecommendedOffer(
     cards: Card[],
     playerPosition: number
@@ -417,7 +453,7 @@ function getRecommendedOffer(
     for (let suit = 0; suit < 4; suit++) {
         let score = getWijsScore(wijs, suit);
 
-        console.log("Suit score", score, CardSuit[suit]);
+        console.log("Suit score", wijs, score, CardSuit[suit]);
         if (score > bestSuitScore) {
             bestSuit = suit;
             bestSuitScore = score;
@@ -442,12 +478,52 @@ function getRecommendedOffer(
     }
 }
 
+function getWinningCard(cards: Card[], troef: CardSuit): [Card, number] {
+    let highestPlayedCard = cards[0];
+    let highestPlayedScore = -1;
+    // let highestPlayedCardIndex = -1;
+    if (cards.some((e) => e.suit === troef)) {
+        for (let i = 0; i < cards.length; i++) {
+            const card = cards[i];
+            if (card.suit !== troef) {
+                continue;
+            }
+
+            const cardScore = getCardOrder(card, true);
+            if (cardScore > highestPlayedScore) {
+                highestPlayedCard = card;
+                highestPlayedScore = cardScore;
+                // highestPlayedCardIndex = i;
+            }
+        }
+    } else {
+        for (let i = 0; i < cards.length; i++) {
+            const card = cards[i];
+            if (card.suit !== cards[0].suit) {
+                continue;
+            }
+
+            const cardScore = getCardOrder(card, false);
+            if (cardScore > highestPlayedScore) {
+                highestPlayedCard = card;
+                highestPlayedScore = cardScore;
+                // highestPlayedCardIndex = i;
+            }
+        }
+    }
+
+    return [highestPlayedCard, highestPlayedScore];
+}
+
 export class Player {
     hand: CardCollection;
+    wonCards: CardCollection;
     offered: number | null = null;
     shouldStartWith: CardSuit | null = null;
+    rememberedPlayedCards: Card[] = [];
+    friendHint: Card | null = null;
 
-    constructor(public scene: Scene, public index: number) {
+    constructor(public game: GameScene, public index: number) {
         const EDGE_SPACING = 100;
         this.hand = new CardCollection(
             "hand",
@@ -463,6 +539,125 @@ export class Player {
                 : window.innerHeight - EDGE_SPACING,
             index == 3 ? -90 : index * 90
         );
+        const WON_EDGE_SPACING = 250;
+        this.wonCards = new CardCollection(
+            "hand",
+            index == 0 || index == 2
+                ? window.innerWidth / 2
+                : index == 1
+                ? WON_EDGE_SPACING
+                : window.innerWidth - WON_EDGE_SPACING,
+            index == 1 || index == 3
+                ? window.innerHeight / 2
+                : index == 2
+                ? WON_EDGE_SPACING
+                : window.innerHeight - WON_EDGE_SPACING,
+            index == 3 ? -90 : index * 90
+        );
+        this.wonCards.spacing = 20;
+        this.wonCards.anglePerCard = 0;
+
+        this.game.events.on("cardplayed", (player: Player, card: Card) => {
+            console.log("Card was played");
+            this.rememberedPlayedCards.push(card);
+
+            if (
+                player.friendHint === null &&
+                this.isFriend(player) &&
+                card.value !== 10
+            ) {
+                this.friendHint = card;
+            }
+        });
+    }
+
+    getFriendIndex() {
+        return (this.index + 2) % 4;
+    }
+
+    isFriend(ofPlayer: Player) {
+        return ofPlayer.index === this.getFriendIndex();
+    }
+
+    getRecommendedPlayCard(onCards: Card[], troef: CardSuit) {
+        if (onCards.length === 0) {
+            const anyTroefLeft = count(
+                this.rememberedPlayedCards,
+                (c) => c.suit === troef
+            );
+
+            if (this.friendHint) {
+                const friendCards = this.hand.cards.filter(
+                    (e) => e.suit === this.friendHint!.suit
+                );
+                if (friendCards.length > 0) return friendCards[0];
+            }
+
+            const playableCards = [...this.hand.cards];
+            playableCards.sort((a, b) => a.value - b.value);
+            return playableCards[0];
+        }
+
+        let scoreInCards = 0;
+        onCards.forEach((e) => {
+            scoreInCards += getCardScore(e, e.suit === troef);
+        });
+
+        const [highestPlayedCard, highestPlayedScore] = getWinningCard(
+            onCards,
+            troef
+        );
+
+        const playableWinCards = this.hand.cards.filter(
+            (e) =>
+                (e.suit === troef && highestPlayedCard.suit !== troef) ||
+                (e.suit === highestPlayedCard.suit &&
+                    getCardOrder(e, e.suit === troef) > highestPlayedScore)
+        );
+
+        let friendWillProbablyWin = false;
+        if (
+            onCards.length <= 1 &&
+            this.friendHint !== null &&
+            onCards[0].suit === this.friendHint.suit
+        ) {
+            friendWillProbablyWin = true;
+        }
+
+        if (highestPlayedCard.originalOwner.isFriend(this)) {
+            friendWillProbablyWin = true;
+        }
+
+        if (!friendWillProbablyWin && playableWinCards.length > 0) {
+            // You could win this, buy or nah?
+            if (playableWinCards[0].suit !== onCards[0].suit) {
+                // You can buy, want to proceed?
+                if (scoreInCards > 10) {
+                    return playableWinCards[0];
+                }
+            } else {
+                // Ez win
+                return playableWinCards[0];
+            }
+        }
+
+        // Play lowest card (follow if possible) (fat if friend will probably win)
+        let playableCards = this.hand.cards.filter(
+            (e) => e.suit === onCards[0].suit
+        );
+        if (playableCards.length <= 0) {
+            playableCards = [...this.hand.cards];
+        }
+        playableCards.sort(
+            (a, b) =>
+                (a.value === 10
+                    ? friendWillProbablyWin
+                        ? 0
+                        : 13.5
+                    : a.value) -
+                (b.value === 10 ? (friendWillProbablyWin ? 0 : 13.5) : b.value)
+        );
+        return playableCards[0];
     }
 
     putOffer() {
@@ -474,12 +669,19 @@ export class GameScene extends Scene {
     currentlyDragging!: Phaser.GameObjects.Sprite;
     testKey: Phaser.Input.Keyboard.Key;
 
+    troef: CardSuit | null = null;
+    troefText: Phaser.GameObjects.Text;
     allCards: Card[];
     players: Player[];
     dropZone: Phaser.GameObjects.GameObject;
     dropZoneText: Phaser.GameObjects.Text;
     dropZoneCollection: CardCollection;
+    // team1Cards: CardCollection;
+    // team2Cards: CardCollection;
+
     dealerPlayerIndex = 0;
+    turnPlayerIndex = 0;
+    startedTurnPlayerIndex = 0;
 
     constructor() {
         super("GameScene");
@@ -495,9 +697,21 @@ export class GameScene extends Scene {
 
     returnCardsToDealerDeckAndDeal() {
         let newAllCards: Card[] = [];
+
+        [...this.dropZoneCollection.cards].forEach((card) => {
+            if (card.currentlyInCollection) {
+                card.currentlyInCollection.removeCard(card);
+                card.currentlyInCollection = undefined;
+            }
+            card.moveTo(window.innerWidth / 2, window.innerHeight / 2, 0);
+            card.setDepth(10);
+            card.setFaceDown(true);
+            newAllCards.push(card);
+        });
+
         for (let p = 0; p < this.players.length; p++) {
             let player = this.players[p];
-            let playerCards = [...player.hand.cards];
+            let playerCards = [...player.hand.cards, ...player.wonCards.cards];
             for (let i = 0; i < playerCards.length; i++) {
                 let card = playerCards[i];
                 if (card.currentlyInCollection) {
@@ -551,6 +765,14 @@ export class GameScene extends Scene {
     }
 
     dealCards() {
+        this.troef = null;
+        this.players.forEach((pl) => {
+            pl.offered = null;
+            pl.shouldStartWith = null;
+            pl.rememberedPlayedCards = [];
+            pl.friendHint = null;
+        });
+
         // Deal cards
         const DEAL_INTERVAL = 50;
         for (let i = 0; i < this.allCards.length; i++) {
@@ -559,6 +781,7 @@ export class GameScene extends Scene {
                 let targetPlayerIdx = Math.floor((i / 4) % 4);
                 if (true || targetPlayerIdx == 0) card.setFaceDown(false);
                 this.players[targetPlayerIdx].hand.addCard(card);
+                card.originalOwner = this.players[targetPlayerIdx];
             });
         }
 
@@ -602,6 +825,24 @@ export class GameScene extends Scene {
             90
         );
         this.dropZoneCollection.spacing = 140;
+
+        // this.team1Cards = new CardCollection(
+        //     "hand",
+        //     window.innerWidth / 2,
+        //     window.innerHeight - 300,
+        //     0
+        // );
+        // this.team1Cards.anglePerCard = 0;
+        // this.team1Cards.spacing = 15;
+
+        // this.team2Cards = new CardCollection(
+        //     "hand",
+        //     300,
+        //     window.innerHeight / 2,
+        //     90
+        // );
+        // this.team2Cards.anglePerCard = 0;
+        // this.team2Cards.spacing = 15;
 
         this.input.keyboard!.on("keydown-A", () => {
             this.returnCardsToDealerDeckAndDeal();
@@ -653,7 +894,9 @@ export class GameScene extends Scene {
         this.input.on("drop", (_ev: any, dropped: any, droppedOn: any) => {
             if (dropped instanceof Card && this.dropZone == droppedOn) {
                 // console.log("card got dropped on dropzone", dropped);
-                this.dropZoneCollection.addCard(dropped, false);
+                this.playCard(this.players[0], dropped);
+                // this.dropZoneCollection.addCard(dropped, false);
+                // this.events.emit("cardplayed", dropped);
             }
         });
 
@@ -676,10 +919,41 @@ export class GameScene extends Scene {
             .setOrigin(0.5)
             .setDepth(2);
 
+        this.troefText = this.add
+            .text(
+                window.innerWidth / 2 - 300,
+                window.innerHeight / 2 - 300,
+                "Troef = ?",
+                {
+                    fontFamily: "Arial Black",
+                    fontSize: 24,
+                    color: "#aaaaaa",
+                    // stroke: "#000000",
+                    // strokeThickness: 8,
+                    align: "center",
+                }
+            )
+            .setOrigin(0.5)
+            .setDepth(2);
+
         this.shuffleCards();
         this.dealCards();
 
         EventBus.emit("current-scene-ready", this);
+    }
+
+    playCard(player: Player, card: Card) {
+        if (player.hand !== card.currentlyInCollection) {
+            console.error("Card was played by invalid player");
+            return;
+        }
+        if (player.index !== this.turnPlayerIndex) {
+            console.error("Card was played by player that is not at turn");
+            return;
+        }
+
+        this.dropZoneCollection.addCard(card);
+        this.events.emit("cardplayed", player, card);
     }
 
     playerShouldOffer(playerIndex: number) {
@@ -727,8 +1001,16 @@ export class GameScene extends Scene {
                 // alert("Niemand heeft geboden! Opnieuw schudden");
                 // this.returnCardsToDealerDeckAndDeal();
             } else {
-                console.log("Player has the highest offer", highestOfferPlayer);
-                this.playerShouldPlay((highestOfferPlayer as Player).index);
+                console.log(
+                    "Player has the highest offer",
+                    (highestOfferPlayer as Player).index,
+                    (highestOfferPlayer as Player).offered,
+                    CardSuit[(highestOfferPlayer as Player).shouldStartWith!]
+                );
+                this.startedTurnPlayerIndex = (
+                    highestOfferPlayer as Player
+                ).index;
+                this.playerShouldPlay(this.startedTurnPlayerIndex);
             }
             return;
         } else {
@@ -736,11 +1018,71 @@ export class GameScene extends Scene {
         }
     }
 
-    playerShouldPlay(playerIndex: number) {}
+    playerShouldPlay(playerIndex: number) {
+        this.turnPlayerIndex = playerIndex;
+        const player = this.players[playerIndex];
+
+        if (playerIndex === 0) {
+            // local player
+        }
+
+        if (this.troef === null) {
+            this.troef = player.shouldStartWith!;
+        }
+
+        const playedCard = player.getRecommendedPlayCard(
+            this.dropZoneCollection.cards,
+            this.troef
+        );
+        this.playCard(player, playedCard);
+
+        if (this.dropZoneCollection.cards.length >= 4) {
+            console.log("End of round, who won?");
+            const [highestCard, _highestCardScore] = getWinningCard(
+                this.dropZoneCollection.cards,
+                this.troef
+            );
+
+            console.log(
+                "getwinningcard %s = %s",
+                this.dropZoneCollection.cards
+                    .map((e) => e.toString())
+                    .join(","),
+                highestCard.toString()
+            );
+
+            console.log(
+                "Player %d won with",
+                highestCard.originalOwner.index,
+                highestCard.toString()
+            );
+
+            this.time.delayedCall(1000, () => {
+                [...this.dropZoneCollection.cards].forEach((card) => {
+                    highestCard.originalOwner.wonCards.addCard(card);
+                });
+            });
+
+            this.time.delayedCall(2000, () => {
+                if (highestCard.originalOwner.hand.cards.length <= 0) {
+                    console.log("End of game!");
+                } else {
+                    this.playerShouldPlay(highestCard.originalOwner.index);
+                }
+            });
+        } else {
+            this.time.delayedCall(500, () => {
+                this.playerShouldPlay((playerIndex + 1) % 4);
+            });
+        }
+    }
 
     update(time: number, delta: number): void {
         // console.log("update");
         super.update(time, delta);
+
+        this.troefText.text =
+            "Troef = " + (this.troef ? CardSuit[this.troef] : "?");
     }
 }
 
