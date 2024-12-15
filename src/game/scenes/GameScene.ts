@@ -67,10 +67,7 @@ export class Card extends Phaser.GameObjects.Sprite {
             // this.setFaceDown(false);
         });
         this.on("drag", (_ev: any, x: number, y: number) => {
-            if (this.markTween) {
-                this.markTween.stop();
-                this.markTween = undefined;
-            }
+            this.stopMark();
 
             this.x = x;
             this.y = y;
@@ -111,6 +108,15 @@ export class Card extends Phaser.GameObjects.Sprite {
         this.setTint(enabled ? 0xffffff : 0x777777);
     }
 
+    stopMark(immediately = true) {
+        if (this.markTween) {
+            if (immediately) this.markTween.stop();
+            else this.markTween.completeAfterLoop();
+
+            this.markTween = undefined;
+        }
+    }
+
     mark(amount = 50, ease = Phaser.Math.Easing.Expo.Out, delay = 0) {
         // this.scene.tweens.add({
         //     targets: this.markerRect,
@@ -120,10 +126,7 @@ export class Card extends Phaser.GameObjects.Sprite {
         //     duration: 500,
         //     loop: -1,
         // });
-        if (this.markTween) {
-            this.markTween.stop();
-            this.markTween = undefined;
-        }
+        this.stopMark();
 
         this.markTween = this.scene.tweens.add({
             targets: this,
@@ -152,10 +155,7 @@ export class Card extends Phaser.GameObjects.Sprite {
     setFaceDown(faceDown: boolean) {
         if (this.isFaceDown == faceDown) return;
 
-        if (this.markTween) {
-            this.markTween.stop();
-            this.markTween = undefined;
-        }
+        this.stopMark();
 
         if (this.flipTween) {
             this.flipTween.stop();
@@ -1315,6 +1315,12 @@ export class GameScene extends Scene {
                     highestOfferPlayer as Player
                 ).index;
 
+                this.players.forEach((pl) => {
+                    pl.hand.cards.forEach((c) => {
+                        c.stopMark(false);
+                    });
+                });
+
                 this.playerBeginPlay(this.startedTurnPlayerIndex);
             }
             return;
@@ -1394,17 +1400,9 @@ export class GameScene extends Scene {
         if (playerIndex === 0) {
             // Local player
 
+            recommendedCard.mark(25);
+
             player.hand.cards.forEach((card) => {
-                console.log(
-                    "playable?",
-                    card.toString(),
-                    isCardPlayable(
-                        this.dropZoneCollection.cards,
-                        player.hand.cards,
-                        card,
-                        this.troef
-                    )
-                );
                 card.setEnabled(
                     isCardPlayable(
                         this.dropZoneCollection.cards,

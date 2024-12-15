@@ -106,7 +106,10 @@ function App() {
 
                             setOffer(currentMaxOffer + 10);
                             setCurrentMaxOffer(currentMaxOffer + 10);
-                            if (recommendedSuit && recommendedOffer) {
+                            if (
+                                recommendedSuit !== null &&
+                                recommendedOffer !== null
+                            ) {
                                 setRecommendation({
                                     suit: recommendedSuit,
                                     offer: recommendedOffer,
