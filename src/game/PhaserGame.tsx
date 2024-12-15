@@ -1,10 +1,11 @@
 import { forwardRef, useEffect, useLayoutEffect, useRef } from "react";
 import StartGame from "./main";
 import { EventBus } from "./EventBus";
+import { GameScene } from "./scenes/GameScene";
 
 export interface IRefPhaserGame {
     game: Phaser.Game | null;
-    scene: Phaser.Scene | null;
+    scene: GameScene | null;
 }
 
 interface IProps {
@@ -45,11 +46,14 @@ export const PhaserGame = forwardRef<IRefPhaserGame, IProps>(
                     }
 
                     if (typeof ref === "function") {
-                        ref({ game: game.current, scene: sceneInstance });
+                        ref({
+                            game: game.current,
+                            scene: sceneInstance as GameScene,
+                        });
                     } else if (ref) {
                         ref.current = {
                             game: game.current,
-                            scene: sceneInstance,
+                            scene: sceneInstance as GameScene,
                         };
                     }
                 }

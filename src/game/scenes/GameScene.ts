@@ -7,7 +7,7 @@ const CARD_SCALE = 2;
 const CARD_WIDTH = 72;
 const CARD_HEIGHT = 96;
 
-enum CardSuit {
+export enum CardSuit {
     CLUBS = 0,
     SPADES = 1,
     HEARTS = 2,
@@ -28,7 +28,7 @@ function getCardSuitOrder(suit: CardSuit, noHearts = false) {
     }
 }
 
-class Card extends Phaser.GameObjects.Sprite {
+export class Card extends Phaser.GameObjects.Sprite {
     private faceFrame: number;
     private isFaceDown: boolean;
     private flipTween?: Phaser.Tweens.Tween;
@@ -672,6 +672,10 @@ export class Player {
         });
     }
 
+    getName() {
+        return "Player " + this.index;
+    }
+
     getFriendIndex() {
         return (this.index + 2) % 4;
     }
@@ -787,10 +791,6 @@ export class Player {
 
         return playableCards[0];
     }
-
-    putOffer() {
-        // What to offer?
-    }
 }
 
 export class GameScene extends Scene {
@@ -892,6 +892,10 @@ export class GameScene extends Scene {
         }
     }
 
+    getDealer() {
+        return this.players[this.dealerPlayerIndex];
+    }
+
     dealCards() {
         this.troef = null;
         this.players.forEach((pl) => {
@@ -943,7 +947,7 @@ export class GameScene extends Scene {
                     });
                 });
 
-                // this.playerShouldOffer((this.dealerPlayerIndex + 1) % 4);
+                this.playerShouldOffer((this.dealerPlayerIndex + 1) % 4);
             }
         );
     }
@@ -1196,33 +1200,29 @@ export class GameScene extends Scene {
         this.events.emit("cardplayed", player, card);
     }
 
-    playerShouldOffer(playerIndex: number) {
-        let playerPosition = (this.dealerPlayerIndex + playerIndex + 3) % 4;
-        let player = this.players[playerIndex];
+    getLocalPlayer() {
+        return this.players[0];
+    }
 
-        let recommendedOffer = getRecommendedOffer(
-            player.hand.cards,
-            playerPosition
-        );
+    putOffer(player: Player, offer: number | null) {
+        if (player.offered !== null) {
+            console.error("player.offered !== null during putOffer");
+        }
 
-        if (recommendedOffer != null) {
-            player.shouldStartWith = recommendedOffer[0];
-            player.offered = recommendedOffer[1];
-        } else {
-            player.shouldStartWith = null;
-            player.offered = null;
+        if (offer != null) {
+            player.offered = offer;
         }
 
         console.log(
             "Player %d offers %s (should start with %s)",
-            playerIndex,
+            player.index,
             player.offered,
             player.shouldStartWith
                 ? CardSuit[player.shouldStartWith]
                 : "nothing"
         );
 
-        if (playerIndex == this.dealerPlayerIndex) {
+        if (player.index == this.dealerPlayerIndex) {
             console.log("All players offered, start");
             let highestOfferPlayer: Player | null = null;
             this.players.forEach((player) => {
@@ -1237,9 +1237,9 @@ export class GameScene extends Scene {
             });
 
             if (highestOfferPlayer === null) {
-                console.log("Nobody proposed an offer");
+                // console.log("Nobody proposed an offer");
                 // alert("Niemand heeft geboden! Opnieuw schudden");
-                // this.returnCardsToDealerDeckAndDeal();
+                this.returnCardsToDealerDeckAndDeal();
             } else {
                 console.log(
                     "Player has the highest offer",
@@ -1255,7 +1255,42 @@ export class GameScene extends Scene {
             }
             return;
         } else {
-            this.playerShouldOffer((playerIndex + 1) % 4);
+            this.playerShouldOffer((player.index + 1) % 4);
+        }
+    }
+
+    playerShouldOffer(playerIndex: number) {
+        let playerPosition = (this.dealerPlayerIndex + playerIndex + 3) % 4;
+        let player = this.players[playerIndex];
+
+        this.setTriangleToPlayer(playerIndex);
+
+        let recommendedOffer = getRecommendedOffer(
+            player.hand.cards,
+            playerPosition
+        );
+
+        if (recommendedOffer != null) {
+            player.shouldStartWith = recommendedOffer[0];
+        }
+
+        if (player.index === 0) {
+            // Local player
+            console.log("Local player should offer", recommendedOffer);
+
+            this.events.emit(
+                "shouldoffer",
+                player,
+                recommendedOffer == null ? null : recommendedOffer[0],
+                recommendedOffer == null ? null : recommendedOffer[1]
+            );
+        } else {
+            this.time.delayedCall(1000, () => {
+                this.putOffer(
+                    player,
+                    recommendedOffer == null ? null : recommendedOffer[1]
+                );
+            });
         }
     }
 
