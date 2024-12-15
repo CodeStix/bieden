@@ -62,6 +62,7 @@ export class Card extends Phaser.GameObjects.Sprite {
 
         this.on("dragstart", () => {
             // this.scale = CARD_SCALE + 0.5;
+
             this.depth = 100;
             // this.setFaceDown(false);
         });
@@ -104,6 +105,10 @@ export class Card extends Phaser.GameObjects.Sprite {
 
     isMarked() {
         return this.markTween !== undefined;
+    }
+
+    setEnabled(enabled: boolean) {
+        this.setTint(enabled ? 0xffffff : 0x777777);
     }
 
     mark(amount = 50, ease = Phaser.Math.Easing.Expo.Out, delay = 0) {
@@ -522,7 +527,7 @@ function count<T>(arr: T[], predicate: (value: T) => boolean) {
 
 function getRecommendedOffer(
     cards: Card[],
-    playerPosition: number
+    alreadyOfferedPlayers: Player[]
 ): [CardSuit, number] | null {
     let wijs = calculateWijs(cards);
 
@@ -591,6 +596,24 @@ function getWinningCard(cards: Card[], troef: CardSuit): [Card, number] {
     }
 
     return [highestPlayedCard, highestPlayedOrder];
+}
+
+function isCardPlayable(
+    alreadyPlayedCards: Card[],
+    handCards: Card[],
+    card: Card,
+    troef: CardSuit | null
+) {
+    if (alreadyPlayedCards.length === 0 || troef === null) {
+        return true;
+    }
+    if (card.suit === troef) {
+        return true;
+    }
+    if (handCards.some((e) => e.suit === alreadyPlayedCards[0].suit)) {
+        return card.suit === alreadyPlayedCards[0].suit;
+    }
+    return true;
 }
 
 export class Player {
@@ -927,7 +950,7 @@ export class GameScene extends Scene {
             this.time.delayedCall(i * DEAL_INTERVAL, () => {
                 let card = this.allCards[i];
                 let targetPlayerIdx = Math.floor((i / 4) % 4);
-                if (true || targetPlayerIdx == 0) card.setFaceDown(false);
+                if (targetPlayerIdx == 0) card.setFaceDown(false);
                 this.players[targetPlayerIdx].hand.addCard(card);
                 card.originalOwner = this.players[targetPlayerIdx];
             });
@@ -936,7 +959,8 @@ export class GameScene extends Scene {
         this.time.delayedCall(
             this.allCards.length * DEAL_INTERVAL + 100,
             () => {
-                let helpHandForPlayers = [0, 1, 2, 3];
+                // let helpHandForPlayers = [0, 1, 2, 3];
+                let helpHandForPlayers = [0];
 
                 helpHandForPlayers.forEach((playerIndex) => {
                     this.players[playerIndex].hand.sortCards();
@@ -963,7 +987,7 @@ export class GameScene extends Scene {
                     });
                 });
 
-                this.playerShouldOffer((this.dealerPlayerIndex + 1) % 4);
+                this.playerBeginOffer((this.dealerPlayerIndex + 1) % 4);
             }
         );
     }
@@ -1211,8 +1235,24 @@ export class GameScene extends Scene {
             console.error("Card was played by player that is not at turn");
             return;
         }
+        if (
+            !isCardPlayable(
+                this.dropZoneCollection.cards,
+                player.hand.cards,
+                card,
+                this.troef
+            )
+        ) {
+            console.error("Card is not playable");
+            return;
+        }
+
+        player.hand.cards.forEach((card) => {
+            card.setEnabled(true);
+        });
 
         this.dropZoneCollection.addCard(card);
+        card.setFaceDown(false);
         this.events.emit("cardplayed", player, card);
     }
 
@@ -1271,19 +1311,27 @@ export class GameScene extends Scene {
             }
             return;
         } else {
-            this.playerShouldOffer((player.index + 1) % 4);
+            this.playerBeginOffer((player.index + 1) % 4);
         }
     }
 
-    playerShouldOffer(playerIndex: number) {
-        let playerPosition = (this.dealerPlayerIndex + playerIndex + 3) % 4;
+    playerBeginOffer(playerIndex: number) {
         let player = this.players[playerIndex];
 
         this.setTriangleToPlayer(playerIndex);
 
+        let alreadyOfferedPlayers: Player[] = [];
+        for (let i = 0; i < 4; i++) {
+            const pl = this.players[(this.dealerPlayerIndex + 1 + i) % 4];
+            if (pl.index === playerIndex) {
+                break;
+            }
+            alreadyOfferedPlayers.push(pl);
+        }
+
         let recommendedOffer = getRecommendedOffer(
             player.hand.cards,
-            playerPosition
+            alreadyOfferedPlayers
         );
 
         if (recommendedOffer != null) {
@@ -1298,7 +1346,8 @@ export class GameScene extends Scene {
                 "shouldoffer",
                 player,
                 recommendedOffer == null ? null : recommendedOffer[0],
-                recommendedOffer == null ? null : recommendedOffer[1]
+                recommendedOffer == null ? null : recommendedOffer[1],
+                alreadyOfferedPlayers
             );
         } else {
             this.time.delayedCall(1000, () => {
@@ -1336,6 +1385,28 @@ export class GameScene extends Scene {
 
         if (playerIndex === 0) {
             // Local player
+
+            player.hand.cards.forEach((card) => {
+                console.log(
+                    "playable?",
+                    card.toString(),
+                    isCardPlayable(
+                        this.dropZoneCollection.cards,
+                        player.hand.cards,
+                        card,
+                        this.troef
+                    )
+                );
+                card.setEnabled(
+                    isCardPlayable(
+                        this.dropZoneCollection.cards,
+                        player.hand.cards,
+                        card,
+                        this.troef
+                    )
+                );
+            });
+
             console.log(
                 "Local player should play, recommended card is",
                 recommendedCard.toString(),

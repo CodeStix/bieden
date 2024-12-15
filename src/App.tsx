@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { IRefPhaserGame, PhaserGame } from "./game/PhaserGame";
 import { CardSuit, GameScene, Player } from "./game/scenes/GameScene";
 import {
@@ -22,20 +22,11 @@ function App() {
         suit: CardSuit;
         offer: number;
     } | null>(null);
+    const [alreadyOfferedPlayers, setAlreadyOfferedPlayers] = useState<
+        Player[] | null
+    >();
+    const [currentMaxOffer, setCurrentMaxOffer] = useState<number>(0);
     const [offer, setOffer] = useState<number>(100);
-    // const scene = phaserRef.current.scene as GameScene;
-
-    // useEffect(() => {
-    //     if (phaserRef.current) {
-    //         const scene = phaserRef.current.scene as GameScene;
-    //     }
-    // }, [phaserRef.current]);
-
-    function submitOffer(offer: number | null) {
-        const scene = phaserRef.current!.scene!;
-        scene.putOffer(scene.getLocalPlayer(), offer);
-        setShowOfferDialog(false);
-    }
 
     const scene = phaserRef.current?.scene;
 
@@ -75,6 +66,12 @@ function App() {
         }
     }
 
+    function submitOffer(offer: number | null) {
+        const scene = phaserRef.current!.scene!;
+        scene.putOffer(scene.getLocalPlayer(), offer);
+        setShowOfferDialog(false);
+    }
+
     return (
         <div id="app">
             <PhaserGame
@@ -86,21 +83,36 @@ function App() {
                         (
                             player: Player,
                             recommendedSuit: CardSuit | null,
-                            recommendedOffer: number | null
+                            recommendedOffer: number | null,
+                            alreadyOfferedPlayers: Player[]
                         ) => {
                             console.log(
                                 "Should offer",
                                 player,
                                 recommendedSuit,
-                                recommendedOffer
+                                recommendedOffer,
+                                alreadyOfferedPlayers
                             );
-                            setOffer(100);
+
+                            let currentMaxOffer = 90;
+                            alreadyOfferedPlayers.forEach((o) => {
+                                if (
+                                    o.offered !== null &&
+                                    o.offered > currentMaxOffer
+                                ) {
+                                    currentMaxOffer = o.offered;
+                                }
+                            });
+
+                            setOffer(currentMaxOffer + 10);
+                            setCurrentMaxOffer(currentMaxOffer + 10);
                             if (recommendedSuit && recommendedOffer) {
                                 setRecommendation({
                                     suit: recommendedSuit,
                                     offer: recommendedOffer,
                                 });
                             }
+                            setAlreadyOfferedPlayers(alreadyOfferedPlayers);
                             setShowOfferDialog(true);
                         }
                     );
@@ -119,12 +131,13 @@ function App() {
                             {offers}
                         </ul>
 
-                        {recommendation && (
-                            <Text as="p" style={{ fontWeight: "bold" }}>
-                                Aanbevolen: {recommendation.offer} (
-                                {CardSuit[recommendation.suit]})
-                            </Text>
-                        )}
+                        {recommendation &&
+                            recommendation.offer >= currentMaxOffer && (
+                                <Text as="p" style={{ fontWeight: "bold" }}>
+                                    Aanbevolen: {recommendation.offer} (
+                                    {CardSuit[recommendation.suit]})
+                                </Text>
+                            )}
                     </AlertDialog.Description>
 
                     <Button
@@ -144,7 +157,7 @@ function App() {
                     >
                         <Flex direction="column" gap="2">
                             <Button
-                                disabled={offer < 110}
+                                disabled={offer - 10 < currentMaxOffer}
                                 color="red"
                                 variant="soft"
                                 style={{ width: "100%" }}
@@ -154,7 +167,7 @@ function App() {
                                 Bod - 10
                             </Button>
                             <Button
-                                disabled={offer < 200}
+                                disabled={offer - 100 < currentMaxOffer}
                                 color="red"
                                 variant="soft"
                                 style={{ width: "100%" }}
@@ -175,7 +188,7 @@ function App() {
                         </Flex>
                         <Flex direction="column" gap="2">
                             <Button
-                                disabled={offer >= 300}
+                                disabled={offer + 10 >= 300}
                                 color="green"
                                 variant="soft"
                                 style={{ width: "100%" }}
@@ -185,7 +198,7 @@ function App() {
                                 Bod + 10
                             </Button>
                             <Button
-                                disabled={offer >= 300}
+                                disabled={offer + 100 >= 300}
                                 color="green"
                                 variant="soft"
                                 style={{ width: "100%" }}
