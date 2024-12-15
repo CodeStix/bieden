@@ -616,6 +616,16 @@ function isCardPlayable(
     return true;
 }
 
+function getPlayableCards(
+    alreadyPlayedCards: Card[],
+    handCards: Card[],
+    troef: CardSuit | null
+) {
+    return handCards.filter((c) =>
+        isCardPlayable(alreadyPlayedCards, handCards, c, troef)
+    );
+}
+
 export class Player {
     hand: CardCollection;
     wonCards: CardCollection;
@@ -790,12 +800,10 @@ export class Player {
         }
 
         // Play lowest card (follow if possible) (fat if friend will probably win)
-        let playableCards = this.hand.cards.filter(
-            (e) => e.suit === onCards[0].suit
-        );
-        if (playableCards.length <= 0) {
-            playableCards = [...this.hand.cards];
-        }
+        let playableCards = getPlayableCards(onCards, this.hand.cards, troef);
+        // if (playableCards.length <= 0) {
+        //     playableCards = [...this.hand.cards];
+        // }
         if (friendWillProbablyWin) {
             // Put card with highest score first
             playableCards.sort(
