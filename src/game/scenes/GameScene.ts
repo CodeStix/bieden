@@ -695,15 +695,24 @@ export class Player {
                 const friendCards = this.hand.cards.filter(
                     (e) => e.suit === this.friendHint!.suit
                 );
-                if (friendCards.length > 0) return friendCards[0];
+                if (friendCards.length > 0) {
+                    // Put card with highest score first
+                    friendCards.sort(
+                        (a, b) =>
+                            getCardScore(b, b.suit === troef) -
+                            getCardScore(a, a.suit === troef)
+                    );
+
+                    return friendCards[0];
+                }
             }
 
             const playableCards = [...this.hand.cards];
-            // Put lowest order first
+            // Put highest order first
             playableCards.sort(
                 (a, b) =>
-                    getCardOrder(a, a.suit === troef) -
-                    getCardOrder(b, b.suit === troef)
+                    getCardOrder(b, b.suit === troef) -
+                    getCardOrder(a, a.suit === troef)
             );
             return playableCards[0];
         }
@@ -893,7 +902,14 @@ export class GameScene extends Scene {
     }
 
     getDealer() {
-        return this.players[this.dealerPlayerIndex];
+        return this.players[this.dealerPlayerIndex]!;
+    }
+
+    getPlayer(idx: number) {
+        if (idx < 0 || idx >= 4) {
+            throw new Error("getPlayer invalid index " + idx);
+        }
+        return this.players[idx];
     }
 
     dealCards() {

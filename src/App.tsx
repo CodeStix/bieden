@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { IRefPhaserGame, PhaserGame } from "./game/PhaserGame";
 import { CardSuit, GameScene, Player } from "./game/scenes/GameScene";
 import {
@@ -38,6 +38,42 @@ function App() {
     }
 
     const scene = phaserRef.current?.scene;
+
+    let offers: React.ReactNode[] = [];
+    if (scene) {
+        let dealerPlayer = scene.getDealer();
+        let localPlayer = scene.getLocalPlayer();
+        let offered = true;
+        for (let p = 0; p < 4; p++) {
+            let pl = scene.getPlayer((dealerPlayer.index + 1 + p) % 4);
+            if (pl.index === 0) {
+                offered = false;
+            }
+
+            offers.push(
+                <li>
+                    Speler{" "}
+                    <Text as="span" style={{ fontWeight: "bold" }}>
+                        {pl.getName()}{" "}
+                        {pl.isFriend(localPlayer) ? "(maat)" : null}
+                        {pl === localPlayer ? "(jij)" : null}
+                    </Text>{" "}
+                    {!offered ? (
+                        <>moet nog bieden</>
+                    ) : pl.offered !== null ? (
+                        <>
+                            bied{" "}
+                            <Text as="span" style={{ fontWeight: "bold" }}>
+                                {pl.offered}
+                            </Text>
+                        </>
+                    ) : (
+                        <>heeft getpast.</>
+                    )}
+                </li>
+            );
+        }
+    }
 
     return (
         <div id="app">
@@ -79,27 +115,9 @@ function App() {
                     <AlertDialog.Description mb="4">
                         <Text as="p">Hoeveel wil je bieden?</Text>
 
-                        {scene?.players.map((p) => (
-                            <Text as="p">
-                                Speler{" "}
-                                <Text as="span" style={{ fontWeight: "bold" }}>
-                                    {p.getName()}{" "}
-                                    {p.isFriend(scene.getLocalPlayer())
-                                        ? "(maat)"
-                                        : null}
-                                </Text>{" "}
-                                {p.offered ? (
-                                    <Text
-                                        as="span"
-                                        style={{ fontWeight: "bold" }}
-                                    >
-                                        bied {p.offered}
-                                    </Text>
-                                ) : (
-                                    "past"
-                                )}
-                            </Text>
-                        ))}
+                        <ul style={{ margin: 0, paddingLeft: "1.5rem" }}>
+                            {offers}
+                        </ul>
 
                         {recommendation && (
                             <Text as="p" style={{ fontWeight: "bold" }}>
