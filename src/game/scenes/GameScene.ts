@@ -2,6 +2,7 @@ import { GameObjects, Scene } from "phaser";
 
 import { EventBus } from "../EventBus";
 
+// const SCALE = window.innerWidth < 500 ? 0.5 : 1;
 const CARD_SCALE = 2;
 const CARD_WIDTH = 72;
 const CARD_HEIGHT = 96;
@@ -14,7 +15,7 @@ enum CardSuit {
 }
 const FACE_DOWN_FRAME = 13;
 
-function getCardSuitOrder(suit: CardSuit) {
+function getCardSuitOrder(suit: CardSuit, noHearts = false) {
     switch (suit) {
         case CardSuit.CLUBS:
             return 0;
@@ -23,7 +24,7 @@ function getCardSuitOrder(suit: CardSuit) {
         case CardSuit.SPADES:
             return 2;
         case CardSuit.DIAMONDS:
-            return 3;
+            return noHearts ? 1 : 3;
     }
 }
 
@@ -297,9 +298,12 @@ export class CardCollection {
     }
 
     sortCards() {
+        let noHearts = !this.cards.some((e) => e.suit == CardSuit.HEARTS);
         this.cards.sort(
             (a, b) =>
-                (getCardSuitOrder(a.suit) - getCardSuitOrder(b.suit)) * 100 +
+                (getCardSuitOrder(a.suit, noHearts) -
+                    getCardSuitOrder(b.suit, noHearts)) *
+                    100 +
                 getCardOrder(a, false) -
                 getCardOrder(b, false)
         );
@@ -592,6 +596,7 @@ function getWinningCard(cards: Card[], troef: CardSuit): [Card, number] {
 export class Player {
     hand: CardCollection;
     wonCards: CardCollection;
+    nameText: Phaser.GameObjects.Text;
     offered: number | null = null;
     shouldStartWith: CardSuit | null = null;
     rememberedPlayedCards: Card[] = [];
@@ -602,35 +607,54 @@ export class Player {
         this.hand = new CardCollection(
             "hand",
             index == 0 || index == 2
-                ? window.innerWidth / 2
+                ? game.getWidth() / 2
                 : index == 1
                 ? EDGE_SPACING
-                : window.innerWidth - EDGE_SPACING,
+                : game.getWidth() - EDGE_SPACING,
             index == 1 || index == 3
-                ? window.innerHeight / 2
+                ? game.getHeight() / 2
                 : index == 2
                 ? EDGE_SPACING
-                : window.innerHeight - EDGE_SPACING,
+                : game.getHeight() - EDGE_SPACING,
             index == 3 ? -90 : index * 90
         );
         const WON_EDGE_SPACING = 370;
         this.wonCards = new CardCollection(
             "hand",
             index == 0 || index == 2
-                ? window.innerWidth / 2
+                ? game.getWidth() / 2
                 : index == 1
-                ? window.innerWidth / 2 - WON_EDGE_SPACING
-                : window.innerWidth / 2 + WON_EDGE_SPACING,
+                ? game.getWidth() / 2 - WON_EDGE_SPACING
+                : game.getWidth() / 2 + WON_EDGE_SPACING,
             index == 1 || index == 3
-                ? window.innerHeight / 2
+                ? game.getHeight() / 2
                 : index == 2
-                ? window.innerHeight / 2 - WON_EDGE_SPACING
-                : window.innerHeight / 2 + WON_EDGE_SPACING,
+                ? game.getHeight() / 2 - WON_EDGE_SPACING
+                : game.getHeight() / 2 + WON_EDGE_SPACING,
             index == 3 ? -90 : index * 90
         );
-        this.wonCards.cardScale = 1;
+        this.wonCards.cardScale = CARD_SCALE / 2;
         this.wonCards.spacing = 20;
         this.wonCards.anglePerCard = 0;
+
+        const TEXT_EDGE_SPACING = 230;
+        this.nameText = game.add
+            .text(
+                index == 0 || index == 2
+                    ? game.getWidth() / 2
+                    : index == 1
+                    ? TEXT_EDGE_SPACING
+                    : game.getWidth() - TEXT_EDGE_SPACING,
+                index == 1 || index == 3
+                    ? game.getHeight() / 2
+                    : index == 2
+                    ? TEXT_EDGE_SPACING
+                    : game.getHeight() - TEXT_EDGE_SPACING,
+                "Player " + index
+            )
+            .setAngle(index == 2 ? 0 : index == 3 ? -90 : index * 90)
+            .setAlign("center");
+        this.game.children.add(this.nameText);
 
         this.game.events.on("cardplayed", (player: Player, card: Card) => {
             console.log("Card was played");
@@ -807,7 +831,7 @@ export class GameScene extends Scene {
                 card.currentlyInCollection.removeCard(card);
                 card.currentlyInCollection = undefined;
             }
-            card.moveTo(window.innerWidth / 2, window.innerHeight / 2, 0);
+            card.moveTo(this.getWidth() / 2, this.getHeight() / 2, 0);
             card.setDepth(10);
             card.setFaceDown(true);
             newAllCards.push(card);
@@ -822,7 +846,7 @@ export class GameScene extends Scene {
                     card.currentlyInCollection.removeCard(card);
                     card.currentlyInCollection = undefined;
                 }
-                card.moveTo(window.innerWidth / 2, window.innerHeight / 2, 0);
+                card.moveTo(this.getWidth() / 2, this.getHeight() / 2, 0);
                 card.setDepth(10 + i);
                 card.setFaceDown(true);
                 newAllCards.push(card);
@@ -924,19 +948,29 @@ export class GameScene extends Scene {
         );
     }
 
+    getWidth() {
+        return this.sys.game.scale.gameSize.width;
+    }
+
+    getHeight() {
+        return this.sys.game.scale.gameSize.height;
+    }
+
     create() {
         this.players = [];
         for (let i = 0; i < 4; i++) {
             this.players.push(new Player(this, i));
         }
 
+        // console.log("size", this.sys.game.scale.gameSize);
+
         this.allCards = [];
         for (let s = 0; s < 4; s++) {
             for (let v = 7; v <= 14; v++) {
                 let card = new Card(
                     this,
-                    window.innerWidth / 2,
-                    window.innerHeight / 2,
+                    this.getWidth() / 2,
+                    this.getHeight() / 2,
                     s,
                     v,
                     true
@@ -948,15 +982,15 @@ export class GameScene extends Scene {
 
         this.dropZoneCollection = new CardCollection(
             "radial",
-            window.innerWidth / 2,
-            window.innerHeight / 2,
+            this.getWidth() / 2,
+            this.getHeight() / 2,
             90
         );
         this.dropZoneCollection.spacing = 150;
 
         this.playerTurnTriangle = this.add.triangle(
-            window.innerWidth / 2,
-            window.innerHeight / 2,
+            this.getWidth() / 2,
+            this.getHeight() / 2,
             0 + 30,
             30 + 30,
             -30 + 30,
@@ -965,6 +999,7 @@ export class GameScene extends Scene {
             -30 + 30,
             0xbbbbbb
         );
+
         // this.playerTurnTriangle = this.add.rectangle(
         //     window.innerWidth / 2,
         //     window.innerHeight / 2,
@@ -1002,8 +1037,8 @@ export class GameScene extends Scene {
 
         this.dropZone = this.add
             .rectangle(
-                window.innerWidth / 2,
-                window.innerHeight / 2,
+                this.getWidth() / 2,
+                this.getHeight() / 2,
                 500,
                 500,
                 0x222222
@@ -1028,8 +1063,8 @@ export class GameScene extends Scene {
 
         this.dropZoneText = this.add
             .text(
-                window.innerWidth / 2,
-                window.innerHeight / 2,
+                this.getWidth() / 2,
+                this.getHeight() / 2,
                 "Sleep kaart\nhier",
                 {
                     fontFamily: "Arial Black",
@@ -1045,8 +1080,8 @@ export class GameScene extends Scene {
 
         this.troefText = this.add
             .text(
-                window.innerWidth / 2 - 300,
-                window.innerHeight / 2 - 300,
+                this.getWidth() / 2 - 300,
+                this.getHeight() / 2 - 300,
                 "Troef = ?",
                 {
                     fontFamily: "Arial Black",
@@ -1138,10 +1173,10 @@ export class GameScene extends Scene {
                 const DISTANCE = 280;
                 const ang = current + 90;
                 this.playerTurnTriangle.x =
-                    window.innerWidth / 2 +
+                    this.getWidth() / 2 +
                     Math.cos((ang / 360) * Math.PI * 2) * DISTANCE;
                 this.playerTurnTriangle.y =
-                    window.innerHeight / 2 +
+                    this.getHeight() / 2 +
                     Math.sin((ang / 360) * Math.PI * 2) * DISTANCE;
             },
         });
