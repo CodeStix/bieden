@@ -155,7 +155,7 @@ export class Card extends Phaser.GameObjects.Sprite {
     setFaceDown(faceDown: boolean) {
         if (this.isFaceDown == faceDown) return;
 
-        this.stopMark();
+        // this.stopMark();
 
         if (this.flipTween) {
             this.flipTween.stop();
@@ -598,7 +598,7 @@ function getRecommendedOffer(
     for (let suit = 0; suit < 4; suit++) {
         let score = getWijsScore(wijs, suit);
 
-        console.log("Suit score", wijs, score, CardSuit[suit]);
+        // console.log("Suit score", wijs, score, CardSuit[suit]);
         if (score > bestSuitScore) {
             bestSuit = suit;
             bestSuitScore = score;
@@ -686,6 +686,32 @@ function getPlayableCards(
     return handCards.filter((c) =>
         isCardPlayable(alreadyPlayedCards, handCards, c, troef)
     );
+}
+
+function printKnowledge(
+    knowledge: Map<
+        Player,
+        {
+            hasCards: Set<Card>;
+            doesntHaveCards: Set<Card>;
+        }
+    >
+) {
+    [...knowledge.entries()].forEach(([player, knowledge]) => {
+        console.group("Player " + player.getName());
+
+        console.group("Has");
+        knowledge.hasCards.forEach((value) => console.log(value.toString()));
+        console.groupEnd();
+
+        console.group("Doesn't have");
+        knowledge.doesntHaveCards.forEach((value) =>
+            console.log(value.toString())
+        );
+        console.groupEnd();
+
+        console.groupEnd();
+    });
 }
 
 export class Player {
@@ -811,19 +837,26 @@ export class Player {
             knowledge.hasCards.forEach((c) => {
                 knowledge.doesntHaveCards.delete(c);
             });
+        });
 
-            console.log(
-                "%s: knowledge per player",
-                this.getName(),
-                this.knowledgePerPlayer
-            );
+        this.game.events.on("beginplay", () => {
+            // Add hand cards (other players can't have them because you have them)
+            this.game.players.forEach((player) => {
+                const knowledge = this.knowledgePerPlayer.get(player)!;
+                this.hand.cards.forEach((card) => {
+                    knowledge.doesntHaveCards.add(card);
+                });
+            });
+
+            if (this.index === 0) printKnowledge(this.knowledgePerPlayer);
         });
 
         this.game.events.on("cardplayed", (player: Player, card: Card) => {
-            console.log("Card was played");
+            // console.log("Card was played");
             // this.rememberedPlayedCards.push(card);
 
             this.knowledgePerPlayer.forEach((knowledge) => {
+                knowledge.hasCards.delete(card);
                 knowledge.doesntHaveCards.add(card);
             });
 
@@ -852,6 +885,7 @@ export class Player {
                             return;
                         }
                         knowledge.doesntHaveCards.add(c);
+                        knowledge.hasCards.delete(c);
                     });
             }
         });
@@ -1144,12 +1178,14 @@ export class GameScene extends Scene {
         this.time.delayedCall(
             this.allCards.length * DEAL_INTERVAL + 100,
             () => {
+                let sortHandForPlayers = [0, 1, 2, 3];
+                sortHandForPlayers.forEach((playerIndex) => {
+                    this.players[playerIndex].hand.sortCards();
+                });
+
                 // let helpHandForPlayers = [0, 1, 2, 3];
                 let helpHandForPlayers = [0];
-
                 helpHandForPlayers.forEach((playerIndex) => {
-                    this.players[playerIndex].hand.sortCards();
-
                     console.log("All cards are dealt!");
                     let wijs = calculateWijs(
                         this.players[playerIndex].hand.cards
@@ -1334,52 +1370,9 @@ export class GameScene extends Scene {
             }
         });
 
-        this.events.on("cardplayed", (player: Player, card: Card) => {
-            if (this.troef === null) {
-                console.warn("Set troef to %s", card.toString());
-                this.troef = card.suit;
-            }
+        // this.events.on("cardplayed", (player: Player, card: Card) => {
 
-            if (this.dropZoneCollection.cards.length >= 4) {
-                console.log("End of round, who won?");
-                const [highestCard, _highestCardScore] = getWinningCard(
-                    this.dropZoneCollection.cards,
-                    this.troef!
-                );
-
-                console.log(
-                    "getwinningcard %s = %s",
-                    this.dropZoneCollection.cards
-                        .map((e) => e.toString())
-                        .join(","),
-                    highestCard.toString()
-                );
-
-                console.log(
-                    "Player %d won with",
-                    highestCard.originalOwner.index,
-                    highestCard.toString()
-                );
-
-                this.time.delayedCall(1000, () => {
-                    [...this.dropZoneCollection.cards].forEach((card) => {
-                        highestCard.originalOwner.wonCards.addCard(card);
-                    });
-                });
-
-                this.time.delayedCall(2000, () => {
-                    if (highestCard.originalOwner.hand.cards.length <= 0) {
-                        console.log("End of game!");
-                    } else {
-                        this.playerBeginPlay(highestCard.originalOwner.index);
-                    }
-                });
-            } else {
-                this.time.delayedCall(500, () => {
-                    this.playerBeginPlay((this.turnPlayerIndex + 1) % 4);
-                });
-            }
-        });
+        // });
 
         this.shuffleCards();
         this.dealCards();
@@ -1438,6 +1431,94 @@ export class GameScene extends Scene {
 
         this.dropZoneCollection.addCard(card);
         card.setFaceDown(false);
+
+        let shouldShowWijs = false;
+
+        if (this.troef === null) {
+            console.warn("Set troef to %s", card.toString());
+            this.troef = card.suit;
+            shouldShowWijs = true;
+        }
+
+        let nextPlayerPlaysAt = 0;
+
+        if (shouldShowWijs) {
+            const wijs = calculateWijs(player.hand.cards);
+            const wijsScore = getWijsScore(wijs, this.troef!);
+
+            console.log("Player", player, "shows wijs", wijsScore);
+
+            this.events.emit("showswijs", player, wijs);
+
+            if (player !== this.getLocalPlayer()) {
+                const WIJS_SHOW_TIME = 3000;
+
+                nextPlayerPlaysAt += wijs.length * WIJS_SHOW_TIME;
+
+                wijs.forEach((w, i) => {
+                    if (!w.countsIfTroef(this.troef!)) {
+                        return;
+                    }
+
+                    this.time.delayedCall(i * WIJS_SHOW_TIME, () => {
+                        w.getCards().forEach((card) => {
+                            card.setFaceDown(false);
+                            card.mark(25);
+                        });
+
+                        this.time.delayedCall(WIJS_SHOW_TIME - 500, () => {
+                            w.getCards().forEach((card) => {
+                                card.setFaceDown(
+                                    player !== this.getLocalPlayer()
+                                );
+                                card.stopMark(false);
+                            });
+                        });
+                    });
+                });
+            }
+        }
+
+        if (this.dropZoneCollection.cards.length >= 4) {
+            console.log("End of round, who won?");
+            const [highestCard, _highestCardScore] = getWinningCard(
+                this.dropZoneCollection.cards,
+                this.troef!
+            );
+
+            console.log(
+                "getwinningcard %s = %s",
+                this.dropZoneCollection.cards
+                    .map((e) => e.toString())
+                    .join(","),
+                highestCard.toString()
+            );
+
+            console.log(
+                "Player %d won with",
+                highestCard.originalOwner.index,
+                highestCard.toString()
+            );
+
+            this.time.delayedCall(nextPlayerPlaysAt + 1000, () => {
+                [...this.dropZoneCollection.cards].forEach((card) => {
+                    highestCard.originalOwner.wonCards.addCard(card);
+                });
+            });
+
+            this.time.delayedCall(nextPlayerPlaysAt + 2000, () => {
+                if (highestCard.originalOwner.hand.cards.length <= 0) {
+                    console.log("End of game!");
+                } else {
+                    this.playerBeginPlay(highestCard.originalOwner.index);
+                }
+            });
+        } else {
+            this.time.delayedCall(nextPlayerPlaysAt + 500, () => {
+                this.playerBeginPlay((this.turnPlayerIndex + 1) % 4);
+            });
+        }
+
         this.events.emit("cardplayed", player, card);
     }
 
@@ -1497,43 +1578,9 @@ export class GameScene extends Scene {
                     });
                 });
 
-                const wijs = calculateWijs(highestOfferPlayer.hand.cards);
-
-                const WIJS_SHOW_TIME = 3000;
-
-                wijs.forEach((w, i) => {
-                    this.time.delayedCall(i * WIJS_SHOW_TIME, () => {
-                        w.getCards().forEach((card) => {
-                            card.setFaceDown(false);
-                            card.mark(25);
-                        });
-                    });
-
-                    this.time.delayedCall(
-                        (i + 1) * WIJS_SHOW_TIME - 500,
-                        () => {
-                            w.getCards().forEach((card) => {
-                                card.setFaceDown(
-                                    highestOfferPlayer !== this.getLocalPlayer()
-                                );
-                                card.stopMark();
-                            });
-                        }
-                    );
-                });
-
-                this.events.emit("showswijs", highestOfferPlayer, wijs);
-
-                this.startedTurnPlayerIndex = (
-                    highestOfferPlayer as Player
-                ).index;
-
-                this.time.delayedCall(
-                    (wijs.length + 1) * WIJS_SHOW_TIME,
-                    () => {
-                        this.playerBeginPlay(this.startedTurnPlayerIndex);
-                    }
-                );
+                this.startedTurnPlayerIndex = highestOfferPlayer.index;
+                this.events.emit("beginplay");
+                this.playerBeginPlay(this.startedTurnPlayerIndex);
             }
             return;
         } else {
@@ -1630,6 +1677,8 @@ export class GameScene extends Scene {
                 recommendedCard.toString(),
                 "For troef: " + CardSuit[this.troef ?? player.shouldStartWith!]
             );
+            printKnowledge(player.knowledgePerPlayer);
+
             return;
         }
 
