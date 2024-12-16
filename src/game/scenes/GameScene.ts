@@ -525,6 +525,68 @@ function count<T>(arr: T[], predicate: (value: T) => boolean) {
     return count;
 }
 
+function min<T>(arr: T[], predicate: (value: T) => number): [T, number] {
+    let min = Number.MAX_SAFE_INTEGER;
+    let minItem = arr[0];
+    arr.forEach((item) => {
+        let itemValue = predicate(item);
+        if (itemValue < min) {
+            min = itemValue;
+            minItem = item;
+        }
+    });
+    return [minItem, min];
+}
+
+function max<T>(arr: T[], predicate: (value: T) => number): [T, number] {
+    let max = Number.MIN_SAFE_INTEGER;
+    let maxItem = arr[0];
+    arr.forEach((item) => {
+        let itemValue = predicate(item);
+        if (itemValue > max) {
+            max = itemValue;
+            maxItem = item;
+        }
+    });
+    return [maxItem, max];
+}
+
+function sortCardsByValue(cards: Card[], ascending = true): Card[] {
+    cards = [...cards];
+    cards.sort((a, b) => (a.value - b.value) * (ascending ? 1 : -1));
+    return cards;
+}
+
+function sortCardsByOrder(
+    cards: Card[],
+    troef: CardSuit,
+    ascending = true
+): Card[] {
+    cards = [...cards];
+    cards.sort(
+        (a, b) =>
+            (getCardOrder(a, a.suit === troef) -
+                getCardOrder(b, b.suit === troef)) *
+            (ascending ? 1 : -1)
+    );
+    return cards;
+}
+
+function sortCardsByScore(
+    cards: Card[],
+    troef: CardSuit,
+    ascending = true
+): Card[] {
+    cards = [...cards];
+    cards.sort(
+        (a, b) =>
+            (getCardScore(a, a.suit === troef) -
+                getCardScore(b, b.suit === troef)) *
+            (ascending ? 1 : -1)
+    );
+    return cards;
+}
+
 function getRecommendedOffer(
     cards: Card[],
     alreadyOfferedPlayers: Player[]
@@ -632,8 +694,14 @@ export class Player {
     nameText: Phaser.GameObjects.Text;
     offered: number | null = null;
     shouldStartWith: CardSuit | null = null;
-    rememberedPlayedCards: Card[] = [];
     friendHint: Card | null = null;
+    knowledgePerPlayer: Map<
+        Player,
+        {
+            hasCards: Set<Card>;
+            doesntHaveCards: Set<Card>;
+        }
+    >;
 
     constructor(public game: GameScene, public index: number) {
         const EDGE_SPACING = 100;
@@ -689,20 +757,133 @@ export class Player {
             .setAlign("center");
         this.game.children.add(this.nameText);
 
+        this.knowledgePerPlayer = new Map();
+
+        this.game.events.on("begindealing", () => {
+            this.offered = null;
+            this.shouldStartWith = null;
+            this.friendHint = null;
+            this.knowledgePerPlayer.clear();
+            this.game.players.forEach((player) => {
+                this.knowledgePerPlayer.set(player, {
+                    doesntHaveCards: new Set(),
+                    hasCards: new Set(),
+                });
+            });
+        });
+
+        this.game.events.on("showswijs", (player: Player, wijs: IWijs[]) => {
+            let knowledge = this.knowledgePerPlayer.get(player)!;
+
+            wijs.forEach((w) => {
+                w.getCards().forEach((card) => {
+                    knowledge.hasCards.add(card);
+                });
+
+                if (
+                    (w instanceof SequenceWijs || w instanceof MarriageWijs) &&
+                    w.countsIfTroef(this.game.troef!)
+                ) {
+                    const sortedCards = sortCardsByValue(w.getCards());
+
+                    const firstCard = sortedCards[0];
+                    const cardBefore = this.game.allCards.find(
+                        (e) =>
+                            e.suit === firstCard.suit &&
+                            e.value === firstCard.value - 1
+                    );
+                    if (cardBefore) {
+                        knowledge.doesntHaveCards.add(cardBefore);
+                    }
+
+                    const lastCard = sortedCards[sortedCards.length - 1];
+                    const cardAfter = this.game.allCards.find(
+                        (e) =>
+                            e.suit === lastCard.suit &&
+                            e.value === lastCard.value + 1
+                    );
+                    if (cardAfter) {
+                        knowledge.doesntHaveCards.add(cardAfter);
+                    }
+                }
+            });
+
+            knowledge.hasCards.forEach((c) => {
+                knowledge.doesntHaveCards.delete(c);
+            });
+        });
+
         this.game.events.on("cardplayed", (player: Player, card: Card) => {
             console.log("Card was played");
-            this.rememberedPlayedCards.push(card);
+            // this.rememberedPlayedCards.push(card);
 
+            this.knowledgePerPlayer.forEach((knowledge) => {
+                knowledge.doesntHaveCards.add(card);
+            });
+
+            let bottomCard = this.game.dropZoneCollection.cards[0];
             if (
-                player.friendHint === null &&
-                this.isFriend(player) &&
-                this.game.troef !== null &&
-                card.suit !== this.game.troef &&
-                card.value !== 10
+                card.suit !== bottomCard.suit &&
+                (card.suit !== this.game.troef ||
+                    bottomCard.suit === this.game.troef)
             ) {
-                this.friendHint = card;
+                // Doesn't have suit, throws any card
+                if (
+                    this.isFriend(player) &&
+                    player.friendHint === null &&
+                    card.value !== 10
+                ) {
+                    this.friendHint = card;
+                }
+
+                // Add all cards from suit
+                let knowledge = this.knowledgePerPlayer.get(player)!;
+                this.game.allCards
+                    .filter((e) => e.suit === bottomCard.suit)
+                    .forEach((c) => {
+                        // Jack doesn't have to follow
+                        if (c.value === 11 && c.suit === this.game.troef) {
+                            return;
+                        }
+                        knowledge.doesntHaveCards.add(c);
+                    });
             }
         });
+    }
+
+    thinkOneOfPlayersHasCard(
+        players: Player[],
+        card: Card
+    ): boolean | undefined {
+        for (const player of players) {
+            const hasCard = this.thinkPlayerHasCard(player, card);
+            if (hasCard === true) {
+                return true;
+            }
+            if (hasCard === undefined) {
+                return undefined;
+            }
+        }
+        return false;
+    }
+
+    thinkPlayerHasCard(player: Player, card: Card): boolean | undefined {
+        const knowledge = this.knowledgePerPlayer.get(player)!;
+        if (knowledge.hasCards.has(card)) {
+            console.assert(
+                !knowledge.doesntHaveCards.has(card),
+                "!knowledge.doesntHaveCards.has(card)"
+            );
+            return true;
+        }
+        if (knowledge.doesntHaveCards.has(card)) {
+            console.assert(
+                !knowledge.hasCards.has(card),
+                "!knowledge.hasCards.has(card)"
+            );
+            return false;
+        }
+        return undefined;
     }
 
     getName() {
@@ -719,11 +900,6 @@ export class Player {
 
     getRecommendedPlayCard(onCards: Card[], troef: CardSuit) {
         if (onCards.length === 0) {
-            const anyTroefLeft = count(
-                this.rememberedPlayedCards,
-                (c) => c.suit === troef
-            );
-
             if (this.friendHint) {
                 const friendCards = this.hand.cards.filter(
                     (e) => e.suit === this.friendHint!.suit
@@ -945,12 +1121,7 @@ export class GameScene extends Scene {
 
     dealCards() {
         this.troef = null;
-        this.players.forEach((pl) => {
-            pl.offered = null;
-            pl.shouldStartWith = null;
-            pl.rememberedPlayedCards = [];
-            pl.friendHint = null;
-        });
+        this.events.emit("begindealing");
 
         // Deal cards
         const DEAL_INTERVAL = 50;
