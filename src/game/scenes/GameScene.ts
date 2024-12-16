@@ -339,6 +339,30 @@ function getCardScore(card: Card, isTroef: boolean) {
     }
 }
 
+function getCardFattingOrder(card: Card, isTroef: boolean) {
+    switch (card.value) {
+        case 14: // ace
+            return isTroef ? 6 : 15;
+        case 13: // king
+            return isTroef ? 5 : 14;
+        case 12: // queen
+            return isTroef ? 4 : 13;
+        case 11: // jack
+            return isTroef ? 3 : 12;
+        case 10:
+            return isTroef ? 8 : 16;
+        case 9:
+            return isTroef ? 7 : 11;
+        case 8:
+            return isTroef ? 2 : 10;
+        case 7:
+            return isTroef ? 1 : 9;
+        default:
+            console.error("Invalid card value", card.value);
+            return 0;
+    }
+}
+
 function getCardOrder(card: Card, isTroef: boolean) {
     switch (card.value) {
         case 14: // ace
@@ -360,6 +384,19 @@ function getCardOrder(card: Card, isTroef: boolean) {
         default:
             console.error("Invalid card value", card.value);
             return 0;
+    }
+}
+
+function cardGreaterThan(a: Card, b: Card, troef: CardSuit) {
+    if (a.suit === troef && b.suit !== troef) {
+        return true;
+    } else if (a.suit !== troef && b.suit === troef) {
+        return false;
+    } else if (a.suit === troef && b.suit === troef) {
+        return getCardOrder(a, true) > getCardOrder(b, true);
+    } else {
+        // if (a.suit !== troef && b.suit !== troef)
+        return getCardOrder(a, false) > getCardOrder(b, false);
     }
 }
 
@@ -551,6 +588,46 @@ function max<T>(arr: T[], predicate: (value: T) => number): [T, number] {
     return [maxItem, max];
 }
 
+function multipleMax<T>(
+    arr: T[],
+    predicate: (value: T) => number
+): [T[], number] {
+    let max = Number.MIN_SAFE_INTEGER;
+    let maxItems: T[] = [];
+    arr.forEach((item) => {
+        let itemValue = predicate(item);
+        if (itemValue > max) {
+            maxItems = [item];
+            max = itemValue;
+        } else if (itemValue === max) {
+            maxItems.push(item);
+        }
+    });
+    return [maxItems, max];
+}
+
+function multipleMin<T>(
+    arr: T[],
+    predicate: (value: T) => number
+): [T[], number] {
+    let min = Number.MAX_SAFE_INTEGER;
+    let minItems: T[] = [];
+    arr.forEach((item) => {
+        let itemValue = predicate(item);
+        if (itemValue < min) {
+            minItems = [item];
+            min = itemValue;
+        } else if (itemValue === min) {
+            minItems.push(item);
+        }
+    });
+    return [minItems, min];
+}
+
+function pickRandom<T>(arr: T[]): T {
+    return arr[Math.floor(arr.length * Math.random())];
+}
+
 function sortCardsByValue(cards: Card[], ascending = true): Card[] {
     cards = [...cards];
     cards.sort((a, b) => (a.value - b.value) * (ascending ? 1 : -1));
@@ -693,7 +770,7 @@ function printKnowledge(
         Player,
         {
             hasCards: Set<Card>;
-            doesntHaveCards: Set<Card>;
+            couldHaveCards: Set<Card>;
         }
     >
 ) {
@@ -704,8 +781,8 @@ function printKnowledge(
         knowledge.hasCards.forEach((value) => console.log(value.toString()));
         console.groupEnd();
 
-        console.group("Doesn't have");
-        knowledge.doesntHaveCards.forEach((value) =>
+        console.group("Could have cards");
+        knowledge.couldHaveCards.forEach((value) =>
             console.log(value.toString())
         );
         console.groupEnd();
@@ -720,12 +797,13 @@ export class Player {
     nameText: Phaser.GameObjects.Text;
     offered: number | null = null;
     shouldStartWith: CardSuit | null = null;
-    friendHint: Card | null = null;
+    // friendHint: Card | null = null;
     knowledgePerPlayer: Map<
         Player,
         {
+            hint: Card | null;
             hasCards: Set<Card>;
-            doesntHaveCards: Set<Card>;
+            couldHaveCards: Set<Card>;
         }
     >;
 
@@ -788,11 +866,12 @@ export class Player {
         this.game.events.on("begindealing", () => {
             this.offered = null;
             this.shouldStartWith = null;
-            this.friendHint = null;
+            // this.friendHint = null;
             this.knowledgePerPlayer.clear();
             this.game.players.forEach((player) => {
                 this.knowledgePerPlayer.set(player, {
-                    doesntHaveCards: new Set(),
+                    hint: null,
+                    couldHaveCards: new Set(this.game.allCards),
                     hasCards: new Set(),
                 });
             });
@@ -819,7 +898,7 @@ export class Player {
                             e.value === firstCard.value - 1
                     );
                     if (cardBefore) {
-                        knowledge.doesntHaveCards.add(cardBefore);
+                        knowledge.couldHaveCards.delete(cardBefore);
                     }
 
                     const lastCard = sortedCards[sortedCards.length - 1];
@@ -829,14 +908,14 @@ export class Player {
                             e.value === lastCard.value + 1
                     );
                     if (cardAfter) {
-                        knowledge.doesntHaveCards.add(cardAfter);
+                        knowledge.couldHaveCards.delete(cardAfter);
                     }
                 }
             });
 
-            knowledge.hasCards.forEach((c) => {
-                knowledge.doesntHaveCards.delete(c);
-            });
+            // knowledge.hasCards.forEach((c) => {
+            //     knowledge.doesntHaveCards.delete(c);
+            // });
         });
 
         this.game.events.on("beginplay", () => {
@@ -844,11 +923,15 @@ export class Player {
             this.game.players.forEach((player) => {
                 const knowledge = this.knowledgePerPlayer.get(player)!;
                 this.hand.cards.forEach((card) => {
-                    knowledge.doesntHaveCards.add(card);
+                    knowledge.couldHaveCards.delete(card);
                 });
             });
 
-            if (this.index === 0) printKnowledge(this.knowledgePerPlayer);
+            const selfKnowledge = this.knowledgePerPlayer.get(this)!;
+            selfKnowledge.couldHaveCards = new Set(this.hand.cards);
+            selfKnowledge.hasCards = new Set(this.hand.cards);
+
+            // if (this.index === 0) printKnowledge(this.knowledgePerPlayer);
         });
 
         this.game.events.on("cardplayed", (player: Player, card: Card) => {
@@ -857,7 +940,7 @@ export class Player {
 
             this.knowledgePerPlayer.forEach((knowledge) => {
                 knowledge.hasCards.delete(card);
-                knowledge.doesntHaveCards.add(card);
+                knowledge.couldHaveCards.delete(card);
             });
 
             let bottomCard = this.game.dropZoneCollection.cards[0];
@@ -866,17 +949,18 @@ export class Player {
                 (card.suit !== this.game.troef ||
                     bottomCard.suit === this.game.troef)
             ) {
+                // Add all cards from suit
+                let knowledge = this.knowledgePerPlayer.get(player)!;
+
                 // Doesn't have suit, throws any card
                 if (
                     this.isFriend(player) &&
-                    player.friendHint === null &&
+                    knowledge.hint === null &&
                     card.value !== 10
                 ) {
-                    this.friendHint = card;
+                    knowledge.hint = card;
                 }
 
-                // Add all cards from suit
-                let knowledge = this.knowledgePerPlayer.get(player)!;
                 this.game.allCards
                     .filter((e) => e.suit === bottomCard.suit)
                     .forEach((c) => {
@@ -884,47 +968,131 @@ export class Player {
                         if (c.value === 11 && c.suit === this.game.troef) {
                             return;
                         }
-                        knowledge.doesntHaveCards.add(c);
+                        knowledge.couldHaveCards.delete(c);
                         knowledge.hasCards.delete(c);
                     });
             }
         });
     }
 
-    thinkOneOfPlayersHasCard(
-        players: Player[],
-        card: Card
-    ): boolean | undefined {
-        for (const player of players) {
-            const hasCard = this.thinkPlayerHasCard(player, card);
-            if (hasCard === true) {
-                return true;
-            }
-            if (hasCard === undefined) {
-                return undefined;
+    getWinChanceAgainstPlayerForCard(
+        enemyPlayer: Player,
+        card: Card,
+        troef: CardSuit
+    ) {
+        const knowledgeAboutEnemy = this.knowledgePerPlayer.get(enemyPlayer)!;
+
+        for (const hasCard of knowledgeAboutEnemy.hasCards) {
+            if (cardGreaterThan(hasCard, card, troef)) {
+                // This card can win, enemy player can win 100%
+                return 0.0;
             }
         }
-        return false;
+
+        let potentialWinningCards = 0;
+        for (const maybeHasCard of knowledgeAboutEnemy.couldHaveCards) {
+            if (cardGreaterThan(maybeHasCard, card, troef)) {
+                // This card can win
+                potentialWinningCards++;
+                return 0.0; // TODO ???
+            }
+        }
+        return (
+            1.0 -
+            potentialWinningCards / knowledgeAboutEnemy.couldHaveCards.size
+        );
     }
 
-    thinkPlayerHasCard(player: Player, card: Card): boolean | undefined {
-        const knowledge = this.knowledgePerPlayer.get(player)!;
-        if (knowledge.hasCards.has(card)) {
-            console.assert(
-                !knowledge.doesntHaveCards.has(card),
-                "!knowledge.doesntHaveCards.has(card)"
-            );
-            return true;
+    getWinChanceAgainstPlayersForCard(
+        nextPlayers: Player[],
+        card: Card,
+        troef: CardSuit
+    ) {
+        let winChance = 1.0;
+
+        // if (this.hand.cards.includes(card))
+
+        for (const player of nextPlayers) {
+            if (player.isFriend(this)) {
+                continue;
+            } else {
+                winChance *= this.getWinChanceAgainstPlayerForCard(
+                    player,
+                    card,
+                    troef
+                );
+            }
         }
-        if (knowledge.doesntHaveCards.has(card)) {
-            console.assert(
-                !knowledge.hasCards.has(card),
-                "!knowledge.hasCards.has(card)"
-            );
-            return false;
-        }
-        return undefined;
+
+        return winChance;
     }
+
+    // getChancePlayerHasCard(player: Player, card: Card) {
+    //     const knowledge = this.knowledgePerPlayer.get(player)!;
+    //     if (knowledge.hasCards.has(card)) {
+    //         return 1.0;
+    //     }
+    //     if (!knowledge.couldHaveCards.has(card)) {
+    //         return 0.0;
+    //     }
+
+    //     let otherPlayerCountThatCouldHave = 0;
+    //     let otherPlayerCount = 0;
+
+    //     for (const [
+    //         otherPlayer,
+    //         otherKnowledge,
+    //     ] of this.knowledgePerPlayer.entries()) {
+    //         if (otherPlayer === player) {
+    //             continue;
+    //         }
+    //         if (otherKnowledge.hasCards.has(card)) {
+    //             return 0.0;
+    //         }
+
+    //         otherPlayerCount++;
+    //         if (otherKnowledge.couldHaveCards.has(card)) {
+    //             otherPlayerCountThatCouldHave++;
+    //         }
+    //     }
+
+    //     return 1.0 - otherPlayerCountThatCouldHave / otherPlayerCount;
+    // }
+
+    // thinkOneOfPlayersHasCard(
+    //     players: Player[],
+    //     card: Card
+    // ): boolean | undefined {
+    //     for (const player of players) {
+    //         const hasCard = this.thinkPlayerHasCard(player, card);
+    //         if (hasCard === true) {
+    //             return true;
+    //         }
+    //         if (hasCard === undefined) {
+    //             return undefined;
+    //         }
+    //     }
+    //     return false;
+    // }
+
+    // thinkPlayerHasCard(player: Player, card: Card): boolean | undefined {
+    //     const knowledge = this.knowledgePerPlayer.get(player)!;
+    //     if (knowledge.hasCards.has(card)) {
+    //         console.assert(
+    //             !knowledge.doesntHaveCards.has(card),
+    //             "!knowledge.doesntHaveCards.has(card)"
+    //         );
+    //         return true;
+    //     }
+    //     if (knowledge.doesntHaveCards.has(card)) {
+    //         console.assert(
+    //             !knowledge.hasCards.has(card),
+    //             "!knowledge.hasCards.has(card)"
+    //         );
+    //         return false;
+    //     }
+    //     return undefined;
+    // }
 
     getName() {
         return "Player " + this.index;
@@ -938,115 +1106,257 @@ export class Player {
         return ofPlayer.index === this.getFriendIndex();
     }
 
-    getRecommendedPlayCard(onCards: Card[], troef: CardSuit) {
-        if (onCards.length === 0) {
-            if (this.friendHint) {
-                const friendCards = this.hand.cards.filter(
-                    (e) => e.suit === this.friendHint!.suit
+    getRecommendedPlayCard2(
+        nextPlayers: Player[],
+        onCards: Card[],
+        troef: CardSuit
+    ): Card {
+        const playableCards = this.hand.cards.filter((card) =>
+            isCardPlayable(onCards, this.hand.cards, card, troef)
+        );
+
+        let winningPlayableCards = playableCards;
+        if (onCards.length > 0) {
+            const [highestPlayedCard, highestPlayedOrder] = getWinningCard(
+                onCards,
+                troef
+            );
+
+            if (highestPlayedCard.originalOwner.isFriend(this)) {
+                // Friend is winning, fat
+                const chanceFriendWins = this.getWinChanceAgainstPlayersForCard(
+                    nextPlayers,
+                    highestPlayedCard,
+                    troef
                 );
-                if (friendCards.length > 0) {
-                    // Put card with highest score first
-                    friendCards.sort(
-                        (a, b) =>
-                            getCardScore(b, b.suit === troef) -
-                            getCardScore(a, a.suit === troef)
+
+                console.log(
+                    "Friend is winning with win chance",
+                    chanceFriendWins
+                );
+
+                if (chanceFriendWins > 0.5) {
+                    // Help friend by fatting
+                    const [sortedFattingCards] = multipleMax(
+                        playableCards,
+                        (card) => getCardFattingOrder(card, card.suit === troef)
                     );
 
-                    return friendCards[0];
+                    console.log(
+                        "Fat with one of",
+                        sortedFattingCards.map((e) => e.toString()).join("|")
+                    );
+
+                    return pickRandom(sortedFattingCards);
                 }
             }
 
-            const playableCards = [...this.hand.cards];
-            // Put highest order first
-            playableCards.sort(
-                (a, b) =>
-                    getCardOrder(b, b.suit === troef) -
-                    getCardOrder(a, a.suit === troef)
+            winningPlayableCards = playableCards.filter((e) =>
+                cardGreaterThan(e, highestPlayedCard, troef)
             );
-            return playableCards[0];
         }
 
-        let scoreInCards = 0;
-        onCards.forEach((e) => {
-            scoreInCards += getCardScore(e, e.suit === troef);
-        });
+        if (winningPlayableCards.length > 0) {
+            const [bestCards, bestCardWinChance] = multipleMax(
+                winningPlayableCards,
+                (card) =>
+                    this.getWinChanceAgainstPlayersForCard(
+                        nextPlayers,
+                        card,
+                        troef
+                    )
+            );
 
-        const [highestPlayedCard, highestPlayedOrder] = getWinningCard(
-            onCards,
-            troef
-        );
+            console.log(
+                "Win chance with",
+                bestCards.map((e) => e.toString()).join("|"),
+                "is",
+                bestCardWinChance * 100,
+                "percent (best)"
+            );
 
-        const playableWinCards = this.hand.cards.filter(
-            (e) =>
-                (e.suit === troef && highestPlayedCard.suit !== troef) ||
-                (e.suit === highestPlayedCard.suit &&
-                    getCardOrder(e, e.suit === troef) > highestPlayedOrder)
-        );
-        // Put the highest order first
-        playableWinCards.sort(
-            (a, b) =>
-                getCardOrder(b, b.suit === troef) -
-                getCardOrder(a, a.suit === troef)
-        );
+            if (bestCardWinChance > 0.5) {
+                const [bestCardWithLeastValue] = min(bestCards, (card) =>
+                    getCardOrder(card, card.suit === troef)
+                );
+                return bestCardWithLeastValue;
+            }
 
-        let friendWillProbablyWin = false;
-        if (
-            onCards.length <= 1 &&
-            this.friendHint !== null &&
-            onCards[0].suit === this.friendHint.suit
-        ) {
-            friendWillProbablyWin = true;
+            // if (bestCardWinChance > 0.5) {
+            //     return pickRandom(bestCards);
+            // }
         }
 
-        if (highestPlayedCard.originalOwner.isFriend(this)) {
-            friendWillProbablyWin = true;
-        }
+        // throw away bad card / or help friend
+        const nextFriend = nextPlayers.find((pl) => this.isFriend(pl));
+        if (nextFriend) {
+            // Friend still has to play
+            const friendKnowledge = this.knowledgePerPlayer.get(nextFriend)!;
+            // friendKnowledge.hasCards.
+            if (
+                friendKnowledge.hint &&
+                Array.from(friendKnowledge.couldHaveCards).some(
+                    (e) => e.suit === friendKnowledge.hint!.suit
+                )
+            ) {
+                // Use hinted suit
+                const friendHelpCards = playableCards.filter(
+                    (e) => e.suit === friendKnowledge.hint!.suit
+                );
 
-        if (!friendWillProbablyWin && playableWinCards.length > 0) {
-            // You could win this, buy or nah?
-            if (playableWinCards[0].suit !== onCards[0].suit) {
-                // You can buy, want to proceed?
-                if (scoreInCards > 10) {
-                    return playableWinCards[0];
+                const [bestFriendHelpCards, bestFriendCardWinChance] =
+                    multipleMax(friendHelpCards, (card) =>
+                        this.getWinChanceAgainstPlayersForCard(
+                            nextPlayers,
+                            card,
+                            troef
+                        )
+                    );
+
+                console.log(
+                    "Best friend fatting chance",
+                    bestFriendCardWinChance,
+                    "for cards",
+                    bestFriendHelpCards.map((e) => e.toString).join("|")
+                );
+
+                if (
+                    bestFriendCardWinChance > 0.5 &&
+                    friendHelpCards.length > 0
+                ) {
+                    const [sortedFattingCards] = multipleMax(
+                        bestFriendHelpCards,
+                        (card) => getCardFattingOrder(card, card.suit === troef)
+                    );
+
+                    console.log(
+                        "Fat with one of",
+                        sortedFattingCards.map((e) => e.toString()).join("|")
+                    );
+
+                    return pickRandom(sortedFattingCards);
                 }
-            } else {
-                // Ez win
-                return playableWinCards[0];
             }
         }
 
-        // Play lowest card (follow if possible) (fat if friend will probably win)
-        let playableCards = getPlayableCards(onCards, this.hand.cards, troef);
-        // if (playableCards.length <= 0) {
-        //     playableCards = [...this.hand.cards];
-        // }
-        if (friendWillProbablyWin) {
-            // Put card with highest score first
-            playableCards.sort(
-                (a, b) =>
-                    getCardScore(b, b.suit === troef) -
-                    getCardScore(a, a.suit === troef)
-            );
-        } else {
-            // Put card with lowest score first
-            playableCards.sort(
-                (a, b) =>
-                    getCardScore(a, a.suit === troef) -
-                    getCardScore(b, b.suit === troef)
-            );
-        }
-
-        // playableCards.sort(
-        //     (a, b) =>
-        //         (a.value === 10
-        //             ? friendWillProbablyWin
-        //                 ? 0
-        //                 : 13.5
-        //             : a.value) -
-        //         (b.value === 10 ? (friendWillProbablyWin ? 0 : 13.5) : b.value));
-
-        return playableCards[0];
+        const [leastScoreCards] = multipleMin(playableCards, (card) =>
+            getCardScore(card, card.suit === troef)
+        );
+        return min(leastScoreCards, (card) =>
+            getCardOrder(card, card.suit === troef)
+        )[0];
+        // return pickRandom(leastScoreCards);
     }
+
+    // getRecommendedPlayCard(onCards: Card[], troef: CardSuit) {
+    //     if (onCards.length === 0) {
+    //         if (this.friendHint) {
+    //             const friendCards = this.hand.cards.filter(
+    //                 (e) => e.suit === this.friendHint!.suit
+    //             );
+    //             if (friendCards.length > 0) {
+    //                 // Put card with highest score first
+    //                 friendCards.sort(
+    //                     (a, b) =>
+    //                         getCardScore(b, b.suit === troef) -
+    //                         getCardScore(a, a.suit === troef)
+    //                 );
+
+    //                 return friendCards[0];
+    //             }
+    //         }
+
+    //         const playableCards = [...this.hand.cards];
+    //         // Put highest order first
+    //         playableCards.sort(
+    //             (a, b) =>
+    //                 getCardOrder(b, b.suit === troef) -
+    //                 getCardOrder(a, a.suit === troef)
+    //         );
+    //         return playableCards[0];
+    //     }
+
+    //     let scoreInCards = 0;
+    //     onCards.forEach((e) => {
+    //         scoreInCards += getCardScore(e, e.suit === troef);
+    //     });
+
+    //     const [highestPlayedCard, highestPlayedOrder] = getWinningCard(
+    //         onCards,
+    //         troef
+    //     );
+
+    //     const playableWinCards = this.hand.cards.filter(
+    //         (e) =>
+    //             (e.suit === troef && highestPlayedCard.suit !== troef) ||
+    //             (e.suit === highestPlayedCard.suit &&
+    //                 getCardOrder(e, e.suit === troef) > highestPlayedOrder)
+    //     );
+    //     // Put the highest order first
+    //     playableWinCards.sort(
+    //         (a, b) =>
+    //             getCardOrder(b, b.suit === troef) -
+    //             getCardOrder(a, a.suit === troef)
+    //     );
+
+    //     let friendWillProbablyWin = false;
+    //     if (
+    //         onCards.length <= 1 &&
+    //         this.friendHint !== null &&
+    //         onCards[0].suit === this.friendHint.suit
+    //     ) {
+    //         friendWillProbablyWin = true;
+    //     }
+
+    //     if (highestPlayedCard.originalOwner.isFriend(this)) {
+    //         friendWillProbablyWin = true;
+    //     }
+
+    //     if (!friendWillProbablyWin && playableWinCards.length > 0) {
+    //         // You could win this, buy or nah?
+    //         if (playableWinCards[0].suit !== onCards[0].suit) {
+    //             // You can buy, want to proceed?
+    //             if (scoreInCards > 10) {
+    //                 return playableWinCards[0];
+    //             }
+    //         } else {
+    //             // Ez win
+    //             return playableWinCards[0];
+    //         }
+    //     }
+
+    //     // Play lowest card (follow if possible) (fat if friend will probably win)
+    //     let playableCards = getPlayableCards(onCards, this.hand.cards, troef);
+    //     // if (playableCards.length <= 0) {
+    //     //     playableCards = [...this.hand.cards];
+    //     // }
+    //     if (friendWillProbablyWin) {
+    //         // Put card with highest score first
+    //         playableCards.sort(
+    //             (a, b) =>
+    //                 getCardScore(b, b.suit === troef) -
+    //                 getCardScore(a, a.suit === troef)
+    //         );
+    //     } else {
+    //         // Put card with lowest score first
+    //         playableCards.sort(
+    //             (a, b) =>
+    //                 getCardScore(a, a.suit === troef) -
+    //                 getCardScore(b, b.suit === troef)
+    //         );
+    //     }
+
+    //     // playableCards.sort(
+    //     //     (a, b) =>
+    //     //         (a.value === 10
+    //     //             ? friendWillProbablyWin
+    //     //                 ? 0
+    //     //                 : 13.5
+    //     //             : a.value) -
+    //     //         (b.value === 10 ? (friendWillProbablyWin ? 0 : 13.5) : b.value));
+
+    //     return playableCards[0];
+    // }
 }
 
 export class GameScene extends Scene {
@@ -1110,7 +1420,7 @@ export class GameScene extends Scene {
         }
 
         // Do 1 deck cut
-        let cuts = 1;
+        let cuts = 2;
         for (let i = 0; i < cuts; i++) {
             let cutIndex =
                 Math.floor(Math.random() * (newAllCards.length - 8)) + 4;
@@ -1651,7 +1961,13 @@ export class GameScene extends Scene {
 
         this.setTriangleToPlayer(playerIndex);
 
-        const recommendedCard = player.getRecommendedPlayCard(
+        const nextPlayers = [] as Player[];
+        for (let i = 1; i < 4 - this.dropZoneCollection.cards.length; i++) {
+            nextPlayers.push(this.players[(playerIndex + i) % 4]);
+        }
+
+        const recommendedCard = player.getRecommendedPlayCard2(
+            nextPlayers,
             this.dropZoneCollection.cards,
             this.troef ?? player.shouldStartWith!
         );
