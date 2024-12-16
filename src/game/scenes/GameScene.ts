@@ -811,6 +811,12 @@ export class Player {
             knowledge.hasCards.forEach((c) => {
                 knowledge.doesntHaveCards.delete(c);
             });
+
+            console.log(
+                "%s: knowledge per player",
+                this.getName(),
+                this.knowledgePerPlayer
+            );
         });
 
         this.game.events.on("cardplayed", (player: Player, card: Card) => {
@@ -1476,15 +1482,14 @@ export class GameScene extends Scene {
                 // alert("Niemand heeft geboden! Opnieuw schudden");
                 this.returnCardsToDealerDeckAndDeal();
             } else {
+                highestOfferPlayer = highestOfferPlayer as Player;
+
                 console.log(
                     "Player has the highest offer",
-                    (highestOfferPlayer as Player).index,
-                    (highestOfferPlayer as Player).offered,
-                    CardSuit[(highestOfferPlayer as Player).shouldStartWith!]
+                    highestOfferPlayer.index,
+                    highestOfferPlayer.offered,
+                    CardSuit[highestOfferPlayer.shouldStartWith!]
                 );
-                this.startedTurnPlayerIndex = (
-                    highestOfferPlayer as Player
-                ).index;
 
                 this.players.forEach((pl) => {
                     pl.hand.cards.forEach((c) => {
@@ -1492,7 +1497,43 @@ export class GameScene extends Scene {
                     });
                 });
 
-                this.playerBeginPlay(this.startedTurnPlayerIndex);
+                const wijs = calculateWijs(highestOfferPlayer.hand.cards);
+
+                const WIJS_SHOW_TIME = 3000;
+
+                wijs.forEach((w, i) => {
+                    this.time.delayedCall(i * WIJS_SHOW_TIME, () => {
+                        w.getCards().forEach((card) => {
+                            card.setFaceDown(false);
+                            card.mark(25);
+                        });
+                    });
+
+                    this.time.delayedCall(
+                        (i + 1) * WIJS_SHOW_TIME - 500,
+                        () => {
+                            w.getCards().forEach((card) => {
+                                card.setFaceDown(
+                                    highestOfferPlayer !== this.getLocalPlayer()
+                                );
+                                card.stopMark();
+                            });
+                        }
+                    );
+                });
+
+                this.events.emit("showswijs", highestOfferPlayer, wijs);
+
+                this.startedTurnPlayerIndex = (
+                    highestOfferPlayer as Player
+                ).index;
+
+                this.time.delayedCall(
+                    (wijs.length + 1) * WIJS_SHOW_TIME,
+                    () => {
+                        this.playerBeginPlay(this.startedTurnPlayerIndex);
+                    }
+                );
             }
             return;
         } else {
