@@ -1003,91 +1003,169 @@ export class Player {
     //     );
     // }
 
-    getWinChanceAgainstPlayersForCard(
-        nextPlayers: Player[],
-        card: Card,
-        troef: CardSuit
-    ): ["me" | "friend", number] {
-        console.assert(nextPlayers.length !== 0, "nextPlayers.length !== 0");
-        // if (nextPlayers.length === 0) {
-        //     return cardGreaterThan(card,)
-        // }
-
-        let nextPlayersHaveWinningCards = new Set<Card>();
-        let nextPlayersCouldHaveWinningCards = new Set<Card>();
+    /**
+     * Returns the chances for each card the next players have them.
+     */
+    getNextCardsChances(nextPlayers: Player[]): Map<Card, number> {
+        let nextPlayersHaveCards = new Set<Card>();
+        let nextPlayersCouldHaveCards = new Set<Card>();
         for (const player of nextPlayers) {
             const knowledge = this.knowledgePerPlayer.get(player)!;
             for (const c of knowledge.hasCards) {
-                if (cardGreaterThan(c, card, troef))
-                    nextPlayersHaveWinningCards.add(c);
+                // if (cardGreaterThan(c, card, troef))
+                nextPlayersHaveCards.add(c);
             }
             for (const c of knowledge.couldHaveCards) {
-                if (cardGreaterThan(c, card, troef))
-                    nextPlayersCouldHaveWinningCards.add(c);
+                // if (cardGreaterThan(c, card, troef))
+                nextPlayersCouldHaveCards.add(c);
             }
         }
 
-        const [winningNextCard] = getWinningCard(
-            Array.from(nextPlayersHaveWinningCards),
-            troef
-        );
-        if (cardGreaterThan(winningNextCard, card, troef)) {
-            // Impossible to win if not friend
-            if (winningNextCard.originalOwner.isFriend(this)) {
-                return ["friend", 1.0];
-            }
-            return ["me", 0.0];
-        }
-
-        const previousPlayers = this.game.players.filter(
+        const alreadyPlayed = this.game.players.filter(
             (e) => !nextPlayers.includes(e) && e !== this
         );
 
-        let bestPotentialWinningCard: Card | null = null;
-        const nextPlayersHaveWinningCardChanges = new Map<Card, number>();
-        for (const potentialWinningCard of nextPlayersCouldHaveWinningCards) {
+        // let bestPotentialWinningCard: Card | null = null;
+        const nextCardChances = new Map<Card, number>();
+
+        for (const hasCard of nextPlayersHaveCards) {
+            nextCardChances.set(hasCard, 1.0);
+        }
+
+        for (const potentialCard of nextPlayersCouldHaveCards) {
             let previousPlayerCountThatCouldHaveCard = 0;
-            for (const prevPlayer of previousPlayers) {
+            for (const prevPlayer of alreadyPlayed) {
                 const knowledge = this.knowledgePerPlayer.get(prevPlayer)!;
                 console.assert(
-                    !knowledge.hasCards.has(potentialWinningCard),
+                    !knowledge.hasCards.has(potentialCard),
                     "!knowledge.hasCards.has(potentialCard)"
                 );
-                if (knowledge.couldHaveCards.has(potentialWinningCard))
+                if (knowledge.couldHaveCards.has(potentialCard))
                     previousPlayerCountThatCouldHaveCard++;
             }
 
-            nextPlayersHaveWinningCardChanges.set(
-                potentialWinningCard,
-                1.0 -
-                    previousPlayerCountThatCouldHaveCard /
-                        (previousPlayers.length + 1)
-            );
-
-            if (
-                bestPotentialWinningCard === null ||
-                cardGreaterThan(
-                    potentialWinningCard,
-                    bestPotentialWinningCard,
-                    troef
-                )
-            ) {
-                bestPotentialWinningCard = potentialWinningCard;
+            if (!nextCardChances.has(potentialCard)) {
+                nextCardChances.set(
+                    potentialCard,
+                    1.0 -
+                        previousPlayerCountThatCouldHaveCard /
+                            (alreadyPlayed.length + 1)
+                );
+            } else {
+                console.error(
+                    "!nextPlayersHaveWinningCardChanges.has(potentialWinningCard)"
+                );
             }
         }
 
-        if (bestPotentialWinningCard === null) {
-            return ["me", 1.0];
+        return nextCardChances;
+
+        // if (bestPotentialWinningCard === null) {
+        //     return ["me", 1.0];
+        // }
+
+        // let bestPotentialWinningCardWinChance =
+        //     nextPlayersHaveWinningCardChanges.get(bestPotentialWinningCard)!;
+
+        // if (bestPotentialWinningCard.originalOwner.isFriend(this)) {
+        //     return ["friend", bestPotentialWinningCardWinChance];
+        // } else {
+        //     return ["me", 1.0 - bestPotentialWinningCardWinChance];
+        // }
+    }
+
+    getRecommendedPlayCard3(
+        nextPlayers: Player[],
+        onCards: Card[],
+        troef: CardSuit
+    ): Card {
+        const nextCardsChances = this.getNextCardsChances(nextPlayers);
+
+        const playableCards = this.hand.cards.filter((card) =>
+            isCardPlayable(onCards, this.hand.cards, card, troef)
+        );
+
+        const currentlyWinningCard =
+            onCards.length > 0 ? getWinningCard(onCards, troef)[0] : null;
+
+        const chancesPerCard: {
+            card: Card;
+            winChance: number;
+            who: "me" | "friend";
+        }[] = [];
+
+        for (const playCard of playableCards) {
+            const canStillWin =
+                currentlyWinningCard === null
+                    ? true
+                    : cardGreaterThan(playCard, currentlyWinningCard, troef);
+
+            const winningNextCards = new Map(
+                Array.from(nextCardsChances.entries()).filter(([card]) =>
+                    cardGreaterThan(card, playCard, troef)
+                )
+            );
+
+            if (winningNextCards.size <= 0) {
+                chancesPerCard.push({
+                    card: playCard,
+                    who: "me",
+                    winChance: canStillWin ? 1.0 : 0.0,
+                });
+                continue;
+            }
+
+            const [bestNextWinningCard] = getWinningCard(
+                Array.from(winningNextCards.keys()),
+                troef
+            );
+            const bestWinningCardChance =
+                winningNextCards.get(bestNextWinningCard)!;
+
+            if (bestNextWinningCard.originalOwner.isFriend(this)) {
+                // Friend will win
+                chancesPerCard.push({
+                    card: playCard,
+                    who: "friend",
+                    winChance: bestWinningCardChance,
+                });
+            } else {
+                chancesPerCard.push({
+                    card: playCard,
+                    who: "me",
+                    winChance: canStillWin ? 1.0 - bestWinningCardChance : 0.0,
+                });
+            }
         }
 
-        let bestPotentialWinningCardWinChance =
-            nextPlayersHaveWinningCardChanges.get(bestPotentialWinningCard)!;
+        console.log("changes per card", chancesPerCard);
 
-        if (bestPotentialWinningCard.originalOwner.isFriend(this)) {
-            return ["friend", bestPotentialWinningCardWinChance];
-        } else {
-            return ["me", 1.0 - bestPotentialWinningCardWinChance];
+        const [bestCardsToPlay, bestCardsToPlayWinChance] = multipleMax(
+            chancesPerCard,
+            (c) => c.winChance
+        );
+
+        console.log(
+            "changes per card",
+            bestCardsToPlay,
+            bestCardsToPlayWinChance
+        );
+
+        // First help yourself, then your friend
+        const helpMyselfMoves = bestCardsToPlay.filter((e) => e.who === "me");
+        if (helpMyselfMoves.length > 0) {
+            // TODO something else than pick random?
+            return pickRandom(helpMyselfMoves.map((e) => e.card));
+            // return max(helpFriendCards, (move) =>
+            //     getCardFattingOrder(move.card, move.card.suit === troef)
+            // )[0];
         }
+
+        const helpFriendMoves = bestCardsToPlay;
+
+        return max(helpFriendMoves, (move) =>
+            getCardFattingOrder(move.card, move.card.suit === troef)
+        )[0].card;
     }
 
     // getChancePlayerHasCard(player: Player, card: Card) {
@@ -1169,147 +1247,138 @@ export class Player {
         return ofPlayer.index === this.getFriendIndex();
     }
 
-    getRecommendedPlayCard2(
-        nextPlayers: Player[],
-        onCards: Card[],
-        troef: CardSuit
-    ): Card {
-        const playableCards = this.hand.cards.filter((card) =>
-            isCardPlayable(onCards, this.hand.cards, card, troef)
-        );
+    // getRecommendedPlayCard2(
+    //     nextPlayers: Player[],
+    //     onCards: Card[],
+    //     troef: CardSuit
+    // ): Card {
+    //     const playableCards = this.hand.cards.filter((card) =>
+    //         isCardPlayable(onCards, this.hand.cards, card, troef)
+    //     );
 
-        let winningPlayableCards = playableCards;
-        if (onCards.length > 0) {
-            const [highestPlayedCard, highestPlayedOrder] = getWinningCard(
-                onCards,
-                troef
-            );
+    //     let winningPlayableCards = playableCards;
+    //     if (onCards.length > 0) {
+    //         const [highestPlayedCard, highestPlayedOrder] = getWinningCard(
+    //             onCards,
+    //             troef
+    //         );
 
-            if (highestPlayedCard.originalOwner.isFriend(this)) {
-                // Friend is winning, fat
-                const chanceFriendWins = this.getWinChanceAgainstPlayersForCard(
-                    nextPlayers,
-                    highestPlayedCard,
-                    troef
-                );
+    //         if (highestPlayedCard.originalOwner.isFriend(this)) {
+    //             // Friend is winning, fat
+    //             const chanceFriendWins = this.getNextCardsChances(
+    //                 nextPlayers,
+    //                 highestPlayedCard,
+    //                 troef
+    //             );
 
-                console.log(
-                    "Friend is winning with win chance",
-                    chanceFriendWins
-                );
+    //             console.log(
+    //                 "Friend is winning with win chance",
+    //                 chanceFriendWins
+    //             );
 
-                if (chanceFriendWins > 0.5) {
-                    // Help friend by fatting
-                    const [sortedFattingCards] = multipleMax(
-                        playableCards,
-                        (card) => getCardFattingOrder(card, card.suit === troef)
-                    );
+    //             if (chanceFriendWins > 0.5) {
+    //                 // Help friend by fatting
+    //                 const [sortedFattingCards] = multipleMax(
+    //                     playableCards,
+    //                     (card) => getCardFattingOrder(card, card.suit === troef)
+    //                 );
 
-                    console.log(
-                        "Fat with one of",
-                        sortedFattingCards.map((e) => e.toString()).join("|")
-                    );
+    //                 console.log(
+    //                     "Fat with one of",
+    //                     sortedFattingCards.map((e) => e.toString()).join("|")
+    //                 );
 
-                    return pickRandom(sortedFattingCards);
-                }
-            }
+    //                 return pickRandom(sortedFattingCards);
+    //             }
+    //         }
 
-            winningPlayableCards = playableCards.filter((e) =>
-                cardGreaterThan(e, highestPlayedCard, troef)
-            );
-        }
+    //         winningPlayableCards = playableCards.filter((e) =>
+    //             cardGreaterThan(e, highestPlayedCard, troef)
+    //         );
+    //     }
 
-        if (winningPlayableCards.length > 0) {
-            const [bestCards, bestCardWinChance] = multipleMax(
-                winningPlayableCards,
-                (card) =>
-                    this.getWinChanceAgainstPlayersForCard(
-                        nextPlayers,
-                        card,
-                        troef
-                    )
-            );
+    //     if (winningPlayableCards.length > 0) {
+    //         const [bestCards, bestCardWinChance] = multipleMax(
+    //             winningPlayableCards,
+    //             (card) => this.getNextCardsChances(nextPlayers, card, troef)
+    //         );
 
-            console.log(
-                "Win chance with",
-                bestCards.map((e) => e.toString()).join("|"),
-                "is",
-                bestCardWinChance * 100,
-                "percent (best)"
-            );
+    //         console.log(
+    //             "Win chance with",
+    //             bestCards.map((e) => e.toString()).join("|"),
+    //             "is",
+    //             bestCardWinChance * 100,
+    //             "percent (best)"
+    //         );
 
-            if (bestCardWinChance > 0.5) {
-                const [bestCardWithLeastValue] = min(bestCards, (card) =>
-                    getCardOrder(card, card.suit === troef)
-                );
-                return bestCardWithLeastValue;
-            }
+    //         if (bestCardWinChance > 0.5) {
+    //             const [bestCardWithLeastValue] = min(bestCards, (card) =>
+    //                 getCardOrder(card, card.suit === troef)
+    //             );
+    //             return bestCardWithLeastValue;
+    //         }
 
-            // if (bestCardWinChance > 0.5) {
-            //     return pickRandom(bestCards);
-            // }
-        }
+    //         // if (bestCardWinChance > 0.5) {
+    //         //     return pickRandom(bestCards);
+    //         // }
+    //     }
 
-        // throw away bad card / or help friend
-        const nextFriend = nextPlayers.find((pl) => this.isFriend(pl));
-        if (nextFriend) {
-            // Friend still has to play
-            const friendKnowledge = this.knowledgePerPlayer.get(nextFriend)!;
-            // friendKnowledge.hasCards.
-            if (
-                friendKnowledge.hint &&
-                Array.from(friendKnowledge.couldHaveCards).some(
-                    (e) => e.suit === friendKnowledge.hint!.suit
-                )
-            ) {
-                // Use hinted suit
-                const friendHelpCards = playableCards.filter(
-                    (e) => e.suit === friendKnowledge.hint!.suit
-                );
+    //     // throw away bad card / or help friend
+    //     const nextFriend = nextPlayers.find((pl) => this.isFriend(pl));
+    //     if (nextFriend) {
+    //         // Friend still has to play
+    //         const friendKnowledge = this.knowledgePerPlayer.get(nextFriend)!;
+    //         // friendKnowledge.hasCards.
+    //         if (
+    //             friendKnowledge.hint &&
+    //             Array.from(friendKnowledge.couldHaveCards).some(
+    //                 (e) => e.suit === friendKnowledge.hint!.suit
+    //             )
+    //         ) {
+    //             // Use hinted suit
+    //             const friendHelpCards = playableCards.filter(
+    //                 (e) => e.suit === friendKnowledge.hint!.suit
+    //             );
 
-                const [bestFriendHelpCards, bestFriendCardWinChance] =
-                    multipleMax(friendHelpCards, (card) =>
-                        this.getWinChanceAgainstPlayersForCard(
-                            nextPlayers,
-                            card,
-                            troef
-                        )
-                    );
+    //             const [bestFriendHelpCards, bestFriendCardWinChance] =
+    //                 multipleMax(friendHelpCards, (card) =>
+    //                     this.getNextCardsChances(nextPlayers, card, troef)
+    //                 );
 
-                console.log(
-                    "Best friend fatting chance",
-                    bestFriendCardWinChance,
-                    "for cards",
-                    bestFriendHelpCards.map((e) => e.toString).join("|")
-                );
+    //             console.log(
+    //                 "Best friend fatting chance",
+    //                 bestFriendCardWinChance,
+    //                 "for cards",
+    //                 bestFriendHelpCards.map((e) => e.toString).join("|")
+    //             );
 
-                if (
-                    bestFriendCardWinChance > 0.5 &&
-                    friendHelpCards.length > 0
-                ) {
-                    const [sortedFattingCards] = multipleMax(
-                        bestFriendHelpCards,
-                        (card) => getCardFattingOrder(card, card.suit === troef)
-                    );
+    //             if (
+    //                 bestFriendCardWinChance > 0.5 &&
+    //                 friendHelpCards.length > 0
+    //             ) {
+    //                 const [sortedFattingCards] = multipleMax(
+    //                     bestFriendHelpCards,
+    //                     (card) => getCardFattingOrder(card, card.suit === troef)
+    //                 );
 
-                    console.log(
-                        "Fat with one of",
-                        sortedFattingCards.map((e) => e.toString()).join("|")
-                    );
+    //                 console.log(
+    //                     "Fat with one of",
+    //                     sortedFattingCards.map((e) => e.toString()).join("|")
+    //                 );
 
-                    return pickRandom(sortedFattingCards);
-                }
-            }
-        }
+    //                 return pickRandom(sortedFattingCards);
+    //             }
+    //         }
+    //     }
 
-        const [leastScoreCards] = multipleMin(playableCards, (card) =>
-            getCardScore(card, card.suit === troef)
-        );
-        return min(leastScoreCards, (card) =>
-            getCardOrder(card, card.suit === troef)
-        )[0];
-        // return pickRandom(leastScoreCards);
-    }
+    //     const [leastScoreCards] = multipleMin(playableCards, (card) =>
+    //         getCardScore(card, card.suit === troef)
+    //     );
+    //     return min(leastScoreCards, (card) =>
+    //         getCardOrder(card, card.suit === troef)
+    //     )[0];
+    //     // return pickRandom(leastScoreCards);
+    // }
 
     // getRecommendedPlayCard(onCards: Card[], troef: CardSuit) {
     //     if (onCards.length === 0) {
@@ -2029,7 +2098,7 @@ export class GameScene extends Scene {
             nextPlayers.push(this.players[(playerIndex + i) % 4]);
         }
 
-        const recommendedCard = player.getRecommendedPlayCard2(
+        const recommendedCard = player.getRecommendedPlayCard3(
             nextPlayers,
             this.dropZoneCollection.cards,
             this.troef ?? player.shouldStartWith!
