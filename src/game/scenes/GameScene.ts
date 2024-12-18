@@ -74,7 +74,7 @@ export class Card extends Phaser.GameObjects.Sprite {
         });
         this.on("dragend", () => {
             // this.scale = CARD_SCALE;
-            this.depth = 10;
+            // this.depth = 10;
             // this.setFaceDown(true);
             this.currentlyInCollection?.updateCardPositions();
         });
@@ -427,6 +427,23 @@ function cardGreaterThan(a: Card, b: Card, troef: CardSuit) {
     } else {
         // if (a.suit !== troef && b.suit !== troef)
         return getCardOrder(a, false) > getCardOrder(b, false);
+    }
+}
+
+function getNameForSuit(suit: CardSuit) {
+    switch (suit) {
+        case CardSuit.CLUBS: {
+            return "klaveren";
+        }
+        case CardSuit.DIAMONDS: {
+            return "koeken";
+        }
+        case CardSuit.HEARTS: {
+            return "harten";
+        }
+        case CardSuit.SPADES: {
+            return "schoppen";
+        }
     }
 }
 
@@ -813,16 +830,6 @@ function isCardPlayable(
     return true;
 }
 
-function getPlayableCards(
-    alreadyPlayedCards: Card[],
-    handCards: Card[],
-    troef: CardSuit | null
-) {
-    return handCards.filter((c) =>
-        isCardPlayable(alreadyPlayedCards, handCards, c, troef)
-    );
-}
-
 function printKnowledge(
     knowledge: Map<
         Player,
@@ -851,9 +858,10 @@ function printKnowledge(
 
 export class Player {
     hand: CardCollection;
-    wonCards: CardCollection;
+    // wonCards: CardCollection;
     nameText: Phaser.GameObjects.Text;
     offered: number | null = null;
+    shownWijsScore: number = 0;
     shouldStartWith: Card | null = null;
     // friendHint: Card | null = null;
     hinted = false;
@@ -866,7 +874,11 @@ export class Player {
         }
     >;
 
-    constructor(public game: GameScene, public index: number) {
+    constructor(
+        public game: GameScene,
+        public index: number,
+        public wonCards: CardCollection
+    ) {
         const EDGE_SPACING = 100;
         this.hand = new CardCollection(
             "hand",
@@ -879,45 +891,34 @@ export class Player {
                 ? game.getHeight() / 2
                 : index == 2
                 ? EDGE_SPACING
-                : game.getHeight() - EDGE_SPACING,
+                : game.getHeight() - EDGE_SPACING * 2,
             index == 3 ? -90 : index * 90
         );
-        const WON_EDGE_SPACING = 370;
-        this.wonCards = new CardCollection(
-            "hand",
-            index == 0 || index == 2
-                ? game.getWidth() / 2
-                : index == 1
-                ? game.getWidth() / 2 - WON_EDGE_SPACING
-                : game.getWidth() / 2 + WON_EDGE_SPACING,
-            index == 1 || index == 3
-                ? game.getHeight() / 2
-                : index == 2
-                ? game.getHeight() / 2 - WON_EDGE_SPACING
-                : game.getHeight() / 2 + WON_EDGE_SPACING,
-            index == 3 ? -90 : index * 90
-        );
-        this.wonCards.cardScale = CARD_SCALE / 2;
-        this.wonCards.spacing = 20;
-        this.wonCards.anglePerCard = 0;
+        this.hand.cardScale = CARD_SCALE * (index === 0 ? 2 : 1);
+        this.hand.spacing = index === 0 ? 120 : 80;
 
-        const TEXT_EDGE_SPACING = 230;
+        const LEFT_RIGHT_SPACE = 80;
+        const TOP_SPACE = 50;
+        const SHIFT = 450;
         this.nameText = game.add
             .text(
                 index == 0 || index == 2
-                    ? game.getWidth() / 2
+                    ? game.getWidth() / 2 - SHIFT
                     : index == 1
-                    ? TEXT_EDGE_SPACING
-                    : game.getWidth() - TEXT_EDGE_SPACING,
+                    ? LEFT_RIGHT_SPACE
+                    : game.getWidth() - LEFT_RIGHT_SPACE,
                 index == 1 || index == 3
-                    ? game.getHeight() / 2
-                    : index == 2
-                    ? TEXT_EDGE_SPACING
-                    : game.getHeight() - TEXT_EDGE_SPACING,
-                "Player " + index
+                    ? game.getHeight() / 2 - SHIFT
+                    : index === 2
+                    ? TOP_SPACE
+                    : game.getHeight() - TOP_SPACE,
+                "Player " + index,
+                {
+                    font: "sans-serif",
+                }
             )
-            .setAngle(index == 2 ? 0 : index == 3 ? -90 : index * 90)
-            .setAlign("center");
+            .setAngle(0)
+            .setOrigin(0.5, 0.5);
         this.game.children.add(this.nameText);
 
         this.knowledgePerPlayer = new Map();
@@ -926,6 +927,7 @@ export class Player {
             this.offered = null;
             this.shouldStartWith = null;
             this.hinted = false;
+            this.shownWijsScore = 0;
             // this.friendHint = null;
             this.knowledgePerPlayer.clear();
             this.game.players.forEach((player) => {
@@ -1693,6 +1695,7 @@ export class GameScene extends Scene {
 
     troef: CardSuit | null = null;
     troefText: Phaser.GameObjects.Text;
+    scoreText: Phaser.GameObjects.Text;
     allCards: Card[];
     players: Player[];
     dropZone: Phaser.GameObjects.GameObject;
@@ -1703,7 +1706,8 @@ export class GameScene extends Scene {
     playerTurnTriangle: Phaser.GameObjects.Shape;
     dealerPlayerIndex = 0;
     turnPlayerIndex = 0;
-    startedTurnPlayerIndex = 0;
+    startedGamePlayerIndex = 0;
+    gamePhase: "dealing" | "offer" | "play" = "dealing";
 
     constructor() {
         super("GameScene");
@@ -1718,6 +1722,10 @@ export class GameScene extends Scene {
     }
 
     returnCardsToDealerDeckAndDeal() {
+        this.gamePhase = "dealing";
+        this.dealerPlayerIndex++;
+        if (this.dealerPlayerIndex >= 4) this.dealerPlayerIndex = 0;
+
         let newAllCards: Card[] = [];
 
         [...this.dropZoneCollection.cards].forEach((card) => {
@@ -1798,6 +1806,8 @@ export class GameScene extends Scene {
     }
 
     dealCards() {
+        this.gamePhase = "dealing";
+
         this.troef = null;
         this.events.emit("begindealing");
 
@@ -1846,6 +1856,7 @@ export class GameScene extends Scene {
                     });
                 });
 
+                this.gamePhase = "offer";
                 this.playerBeginOffer((this.dealerPlayerIndex + 1) % 4);
             }
         );
@@ -1860,9 +1871,33 @@ export class GameScene extends Scene {
     }
 
     create() {
+        this.dealerPlayerIndex = Math.floor(Math.random() * 4);
+
+        const ourWonCards = new CardCollection(
+            "hand",
+            this.getWidth() / 2,
+            this.getHeight() / 2 - 300,
+            0
+        );
+        ourWonCards.cardScale = CARD_SCALE * 0.6;
+        ourWonCards.spacing = 20;
+        ourWonCards.anglePerCard = 0;
+
+        const theirWonCards = new CardCollection(
+            "hand",
+            this.getWidth() / 2 - 300,
+            this.getHeight() / 2,
+            90
+        );
+        theirWonCards.cardScale = CARD_SCALE * 0.6;
+        theirWonCards.spacing = 20;
+        theirWonCards.anglePerCard = 0;
+
         this.players = [];
         for (let i = 0; i < 4; i++) {
-            this.players.push(new Player(this, i));
+            this.players.push(
+                new Player(this, i, i % 2 === 0 ? ourWonCards : theirWonCards)
+            );
         }
 
         // console.log("size", this.sys.game.scale.gameSize);
@@ -1889,7 +1924,7 @@ export class GameScene extends Scene {
             this.getHeight() / 2,
             90
         );
-        this.dropZoneCollection.spacing = 150;
+        this.dropZoneCollection.spacing = 50;
 
         this.playerTurnTriangle = this.add.triangle(
             this.getWidth() / 2,
@@ -1970,7 +2005,7 @@ export class GameScene extends Scene {
                 this.getHeight() / 2,
                 "Sleep kaart\nhier",
                 {
-                    fontFamily: "Arial Black",
+                    fontFamily: "sans-serif",
                     fontSize: 38,
                     color: "#aaaaaa",
                     // stroke: "#000000",
@@ -1982,14 +2017,25 @@ export class GameScene extends Scene {
             .setDepth(2);
 
         this.troefText = this.add
+            .text(this.getWidth() / 2, this.getHeight() / 4 - 40, "Troef = ?", {
+                fontFamily: "sans-serif",
+                fontSize: 64,
+                color: "#ffffff",
+                // stroke: "#000000",
+                // strokeThickness: 8,
+                align: "center",
+            })
+            .setOrigin(0.5)
+            .setDepth(2);
+        this.scoreText = this.add
             .text(
-                this.getWidth() / 2 - 300,
-                this.getHeight() / 2 - 300,
-                "Troef = ?",
+                this.getWidth() / 2,
+                this.getHeight() / 4 + 40,
+                "Current score",
                 {
-                    fontFamily: "Arial Black",
-                    fontSize: 24,
-                    color: "#aaaaaa",
+                    fontFamily: "sans-serif",
+                    fontSize: 56,
+                    color: "#eeeeee",
                     // stroke: "#000000",
                     // strokeThickness: 8,
                     align: "center",
@@ -2030,7 +2076,7 @@ export class GameScene extends Scene {
                 ),
             ease: Phaser.Math.Easing.Back.InOut,
             onUpdate: (_tween, _target, _key, current) => {
-                const DISTANCE = 280;
+                const DISTANCE = 210;
                 const ang = current + 90;
                 this.playerTurnTriangle.x =
                     this.getWidth() / 2 +
@@ -2043,6 +2089,10 @@ export class GameScene extends Scene {
     }
 
     playCard(player: Player, card: Card) {
+        if (this.gamePhase !== "play") {
+            console.error("Card played during invalid phase");
+            return;
+        }
         if (player.hand !== card.currentlyInCollection) {
             console.error("Card was played by invalid player");
             return;
@@ -2068,6 +2118,7 @@ export class GameScene extends Scene {
         });
 
         this.dropZoneCollection.addCard(card);
+        card.setDepth(this.dropZoneCollection.cards.length + 10);
         card.setFaceDown(false);
 
         let shouldShowWijs = false;
@@ -2083,6 +2134,8 @@ export class GameScene extends Scene {
         if (shouldShowWijs) {
             const wijs = calculateWijs(player.hand.cards);
             const wijsScore = getWijsScore(wijs, this.troef!);
+
+            player.shownWijsScore = wijsScore;
 
             console.log("Player", player, "shows wijs", wijsScore);
 
@@ -2165,6 +2218,11 @@ export class GameScene extends Scene {
     }
 
     putOffer(player: Player, offer: number | null) {
+        if (this.gamePhase !== "offer") {
+            console.error("Offer during invalid phase");
+            return;
+        }
+
         if (player.offered !== null) {
             console.error("player.offered !== null during putOffer");
         }
@@ -2216,9 +2274,10 @@ export class GameScene extends Scene {
                     });
                 });
 
-                this.startedTurnPlayerIndex = highestOfferPlayer.index;
+                this.startedGamePlayerIndex = highestOfferPlayer.index;
+                this.gamePhase = "play";
                 this.events.emit("beginplay");
-                this.playerBeginPlay(this.startedTurnPlayerIndex);
+                this.playerBeginPlay(this.startedGamePlayerIndex);
             }
             return;
         } else {
@@ -2346,8 +2405,45 @@ export class GameScene extends Scene {
         // console.log("update");
         super.update(time, delta);
 
-        this.troefText.text =
-            "Troef = " + (this.troef !== null ? CardSuit[this.troef] : "?");
+        switch (this.gamePhase) {
+            case "dealing": {
+                let dealerPlayer = this.players[this.dealerPlayerIndex];
+                this.troefText.text = "Kaarten verdelen";
+                this.scoreText.text = dealerPlayer.getName() + " is dealer.";
+                break;
+            }
+            case "offer": {
+                this.troefText.text = "Bieden...";
+                this.scoreText.text = "Wachten tot iedereen geboden heeft.";
+
+                break;
+            }
+            case "play": {
+                let playingPlayer = this.players[this.startedGamePlayerIndex];
+
+                let cardScore = 0;
+                playingPlayer.wonCards.cards.forEach((card) => {
+                    cardScore += getCardScore(card, card.suit === this.troef);
+                });
+
+                this.troefText.text =
+                    this.troef !== null
+                        ? "Troef: " + getNameForSuit(this.troef)
+                        : `${playingPlayer.getName()} moet troef bepalen`;
+
+                const won =
+                    playingPlayer.shownWijsScore + cardScore >=
+                    playingPlayer.offered!;
+
+                this.scoreText.text = `${playingPlayer.getName()} heeft ${
+                    playingPlayer.shownWijsScore + cardScore
+                } / ${playingPlayer.offered} (${
+                    playingPlayer.shownWijsScore
+                } wijs)`;
+                this.scoreText.setColor(won ? "#00ff00" : "#eeeeee");
+                break;
+            }
+        }
 
         for (let i = 0; i < this.allCards.length; i++) {
             this.allCards[i].update();
