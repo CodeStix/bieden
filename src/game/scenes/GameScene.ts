@@ -342,21 +342,21 @@ function getCardScore(card: Card, isTroef: boolean) {
 function getCardFattingOrder(card: Card, isTroef: boolean) {
     switch (card.value) {
         case 14: // ace
-            return isTroef ? 6 : 15;
+            return isTroef ? 6 : 9;
         case 13: // king
-            return isTroef ? 5 : 14;
+            return isTroef ? 5 : 12;
         case 12: // queen
-            return isTroef ? 4 : 13;
+            return isTroef ? 4 : 11;
         case 11: // jack
-            return isTroef ? 3 : 12;
+            return isTroef ? 3 : 10;
         case 10:
             return isTroef ? 8 : 16;
         case 9:
-            return isTroef ? 7 : 11;
+            return isTroef ? 7 : 13;
         case 8:
-            return isTroef ? 2 : 10;
+            return isTroef ? 2 : 14;
         case 7:
-            return isTroef ? 1 : 9;
+            return isTroef ? 1 : 15;
         default:
             console.error("Invalid card value", card.value);
             return 0;
@@ -763,7 +763,7 @@ function getRecommendedOffer(
 
     const troefCards = cards.filter((card) => card.suit === bestOfferSuit);
 
-    const jack = troefCards.find((card) => card.value === 9);
+    const jack = troefCards.find((card) => card.value === 11);
     const nine = troefCards.find((card) => card.value === 9);
     if (jack && nine) {
         return [nine, bestOffer];
