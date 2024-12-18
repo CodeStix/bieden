@@ -162,6 +162,8 @@ function App() {
         setShowOfferDialog(false);
     }
 
+    const help = false;
+
     return (
         <div id="app">
             <PhaserGame
@@ -261,12 +263,14 @@ function App() {
                             </ul>
                         )}
 
-                        {recommendation && recommendation.offer >= minOffer && (
-                            <Text as="p" style={{ fontWeight: "bold" }}>
-                                Aanbevolen: {recommendation.offer} (
-                                {CardSuit[recommendation.suit]})
-                            </Text>
-                        )}
+                        {help &&
+                            recommendation &&
+                            recommendation.offer >= minOffer && (
+                                <Text as="p" style={{ fontWeight: "bold" }}>
+                                    Aanbevolen: {recommendation.offer} (
+                                    {CardSuit[recommendation.suit]})
+                                </Text>
+                            )}
                     </AlertDialog.Description>
 
                     <Button

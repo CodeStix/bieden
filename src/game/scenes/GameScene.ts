@@ -344,11 +344,11 @@ function getCardFattingOrder(card: Card, isTroef: boolean) {
         case 14: // ace
             return isTroef ? 6 : 9;
         case 13: // king
-            return isTroef ? 5 : 12;
+            return isTroef ? 5 : 10;
         case 12: // queen
             return isTroef ? 4 : 11;
         case 11: // jack
-            return isTroef ? 3 : 10;
+            return isTroef ? 3 : 12;
         case 10:
             return isTroef ? 8 : 16;
         case 9:
