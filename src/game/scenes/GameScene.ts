@@ -1701,14 +1701,6 @@ export class GameScene extends Scene {
             return;
         }
 
-        player.hand.cards.forEach((card) => {
-            card.setEnabled(true);
-        });
-
-        this.dropZoneCollection.addCard(card);
-        card.setDepth(this.dropZoneCollection.cards.length + 10);
-        card.setFaceDown(false);
-
         let shouldShowWijs = false;
 
         if (this.troef === null) {
@@ -1719,13 +1711,21 @@ export class GameScene extends Scene {
 
         let nextPlayerPlaysAt = 0;
 
+        console.log("shouldShowWijs", shouldShowWijs);
+
         if (shouldShowWijs) {
             const wijs = calculateWijs(player.hand.cards);
             const wijsScore = getWijsScore(wijs, this.troef!);
 
             player.shownWijsScore = wijsScore;
 
-            console.log("Player", player, "shows wijs", wijsScore);
+            console.log(
+                "Player",
+                player.getName(),
+                "shows wijs",
+                wijsScore,
+                wijs
+            );
 
             this.events.emit("showswijs", player, wijs);
 
@@ -1757,6 +1757,14 @@ export class GameScene extends Scene {
                 });
             }
         }
+
+        player.hand.cards.forEach((card) => {
+            card.setEnabled(true);
+        });
+
+        this.dropZoneCollection.addCard(card);
+        card.setDepth(this.dropZoneCollection.cards.length + 10);
+        card.setFaceDown(false);
 
         if (this.dropZoneCollection.cards.length >= 4) {
             console.log("End of round, who won?");
@@ -1853,7 +1861,7 @@ export class GameScene extends Scene {
                     "Player has the highest offer",
                     highestOfferPlayer.index,
                     highestOfferPlayer.offered,
-                    highestOfferPlayer.shouldStartWith!.toString()
+                    highestOfferPlayer.shouldStartWith?.toString()
                 );
 
                 this.players.forEach((pl) => {
@@ -1900,11 +1908,23 @@ export class GameScene extends Scene {
             // Local player
             console.log("Local player should offer", recommendedOffer);
 
+            const wijsScore = recommendedOffer
+                ? getWijsScore(
+                      calculateWijs(player.hand.cards),
+                      recommendedOffer[0].suit
+                  )
+                : null;
+
             this.events.emit(
                 "shouldoffer",
                 player,
-                recommendedOffer == null ? null : recommendedOffer[0].suit,
-                recommendedOffer == null ? null : recommendedOffer[1],
+                recommendedOffer
+                    ? {
+                          wijs: wijsScore,
+                          suit: recommendedOffer[0].suit,
+                          offer: recommendedOffer[1],
+                      }
+                    : null,
                 alreadyOfferedPlayers
             );
         } else {
@@ -1943,7 +1963,9 @@ export class GameScene extends Scene {
 
         let recommendedCard: Card;
         if (this.troef === null) {
-            recommendedCard = player.shouldStartWith!;
+            recommendedCard =
+                player.shouldStartWith ??
+                min(player.hand.cards, (card) => getCardOrder(card, true))[0];
         } else {
             recommendedCard = player.getRecommendedPlayCard3(
                 nextPlayers,
@@ -1971,8 +1993,9 @@ export class GameScene extends Scene {
             console.log(
                 "Local player should play, recommended card is",
                 recommendedCard.toString(),
-                "For troef: " +
-                    CardSuit[this.troef ?? player.shouldStartWith!.suit]
+                "For troef: " + this.troef !== null
+                    ? CardSuit[this.troef!]
+                    : "(unknown)"
             );
             // printKnowledge(player.knowledgePerPlayer);
 

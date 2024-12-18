@@ -19,52 +19,54 @@ function App() {
     const phaserRef = useRef<IRefPhaserGame | null>(null);
     const [showOfferDialog, setShowOfferDialog] = useState(false);
     const [recommendation, setRecommendation] = useState<{
-        suit: CardSuit;
+        wijs: number;
         offer: number;
+        suit: CardSuit;
     } | null>(null);
     const [alreadyOfferedPlayers, setAlreadyOfferedPlayers] = useState<
         Player[] | null
     >();
-    const [currentMaxOffer, setCurrentMaxOffer] = useState<number>(0);
+    const [minOffer, setCurrentMaxOffer] = useState<number>(0);
     const [offer, setOffer] = useState<number>(100);
 
     const scene = phaserRef.current?.scene;
+    let localPlayer = scene?.getLocalPlayer();
 
-    let offers: React.ReactNode[] = [];
-    if (scene) {
-        let dealerPlayer = scene.getDealer();
-        let localPlayer = scene.getLocalPlayer();
-        let offered = true;
-        for (let p = 0; p < 4; p++) {
-            let pl = scene.getPlayer((dealerPlayer.index + 1 + p) % 4);
-            if (pl.index === 0) {
-                offered = false;
-            }
+    // let offers: React.ReactNode[] = [];
+    // if (scene) {
+    //     let dealerPlayer = scene.getDealer();
+    //     let localPlayer = scene.getLocalPlayer();
+    //     let offered = true;
+    //     for (let p = 0; p < 4; p++) {
+    //         let pl = scene.getPlayer((dealerPlayer.index + 1 + p) % 4);
+    //         if (pl.index === 0) {
+    //             offered = false;
+    //         }
 
-            offers.push(
-                <li>
-                    Speler{" "}
-                    <Text as="span" style={{ fontWeight: "bold" }}>
-                        {pl.getName()}{" "}
-                        {pl.isFriend(localPlayer) ? "(maat)" : null}
-                        {pl === localPlayer ? "(jij)" : null}
-                    </Text>{" "}
-                    {!offered ? (
-                        <>moet nog bieden</>
-                    ) : pl.offered !== null ? (
-                        <>
-                            bied{" "}
-                            <Text as="span" style={{ fontWeight: "bold" }}>
-                                {pl.offered}
-                            </Text>
-                        </>
-                    ) : (
-                        <>heeft getpast.</>
-                    )}
-                </li>
-            );
-        }
-    }
+    //         offers.push(
+    //             <li>
+    //                 Speler{" "}
+    //                 <Text as="span" style={{ fontWeight: "bold" }}>
+    //                     {pl.getName()}{" "}
+    //                     {pl.isFriend(localPlayer) ? "(maat)" : null}
+    //                     {pl === localPlayer ? "(jij)" : null}
+    //                 </Text>{" "}
+    //                 {!offered ? (
+    //                     <>moet nog bieden</>
+    //                 ) : pl.offered !== null ? (
+    //                     <>
+    //                         bied{" "}
+    //                         <Text as="span" style={{ fontWeight: "bold" }}>
+    //                             {pl.offered}
+    //                         </Text>
+    //                     </>
+    //                 ) : (
+    //                     <>heeft getpast.</>
+    //                 )}
+    //             </li>
+    //         );
+    //     }
+    // }
 
     function submitOffer(offer: number | null) {
         const scene = phaserRef.current!.scene!;
@@ -82,17 +84,20 @@ function App() {
                         "shouldoffer",
                         (
                             player: Player,
-                            recommendedSuit: CardSuit | null,
-                            recommendedOffer: number | null,
+                            recommendation: {
+                                wijs: number;
+                                offer: number;
+                                suit: CardSuit;
+                            } | null,
                             alreadyOfferedPlayers: Player[]
                         ) => {
-                            console.log(
-                                "Should offer",
-                                player,
-                                recommendedSuit,
-                                recommendedOffer,
-                                alreadyOfferedPlayers
-                            );
+                            // console.log(
+                            //     "Should offer",
+                            //     player,
+                            //     recommendedSuit,
+                            //     recommendedOffer,
+                            //     alreadyOfferedPlayers
+                            // );
 
                             let currentMaxOffer = 90;
                             alreadyOfferedPlayers.forEach((o) => {
@@ -106,15 +111,7 @@ function App() {
 
                             setOffer(currentMaxOffer + 10);
                             setCurrentMaxOffer(currentMaxOffer + 10);
-                            if (
-                                recommendedSuit !== null &&
-                                recommendedOffer !== null
-                            ) {
-                                setRecommendation({
-                                    suit: recommendedSuit,
-                                    offer: recommendedOffer,
-                                });
-                            }
+                            setRecommendation(recommendation);
                             setAlreadyOfferedPlayers(alreadyOfferedPlayers);
                             setShowOfferDialog(true);
                         }
@@ -130,17 +127,45 @@ function App() {
                     <AlertDialog.Description mb="4">
                         <Text as="p">Hoeveel wil je bieden?</Text>
 
-                        <ul style={{ margin: 0, paddingLeft: "1.5rem" }}>
-                            {offers}
-                        </ul>
+                        {alreadyOfferedPlayers && (
+                            <ul style={{ margin: 0, paddingLeft: "1.5rem" }}>
+                                {alreadyOfferedPlayers.map((player) => (
+                                    <li key={player.index}>
+                                        <Text as="span" color="orange">
+                                            {player.getName()}{" "}
+                                            {localPlayer &&
+                                                player.isFriend(
+                                                    localPlayer
+                                                ) && <>(maat)</>}
+                                        </Text>{" "}
+                                        {player.offered !== null ? (
+                                            <>
+                                                heeft{" "}
+                                                <Text as="span" weight="bold">
+                                                    {player.offered}
+                                                </Text>{" "}
+                                                geboden
+                                            </>
+                                        ) : (
+                                            <>heeft gepast.</>
+                                        )}
+                                    </li>
+                                ))}
+                                {alreadyOfferedPlayers.length !== 3 && (
+                                    <li>
+                                        {4 - alreadyOfferedPlayers.length - 1}{" "}
+                                        speler(s) hierna moeten nog bieden.
+                                    </li>
+                                )}
+                            </ul>
+                        )}
 
-                        {recommendation &&
-                            recommendation.offer >= currentMaxOffer && (
-                                <Text as="p" style={{ fontWeight: "bold" }}>
-                                    Aanbevolen: {recommendation.offer} (
-                                    {CardSuit[recommendation.suit]})
-                                </Text>
-                            )}
+                        {recommendation && recommendation.offer >= minOffer && (
+                            <Text as="p" style={{ fontWeight: "bold" }}>
+                                Aanbevolen: {recommendation.offer} (
+                                {CardSuit[recommendation.suit]})
+                            </Text>
+                        )}
                     </AlertDialog.Description>
 
                     <Button
@@ -160,7 +185,7 @@ function App() {
                     >
                         <Flex direction="column" gap="2">
                             <Button
-                                disabled={offer - 10 < currentMaxOffer}
+                                disabled={offer - 10 < minOffer}
                                 color="red"
                                 variant="soft"
                                 style={{ width: "100%" }}
@@ -170,7 +195,7 @@ function App() {
                                 Bod - 10
                             </Button>
                             <Button
-                                disabled={offer - 100 < currentMaxOffer}
+                                disabled={offer - 100 < minOffer}
                                 color="red"
                                 variant="soft"
                                 style={{ width: "100%" }}
@@ -180,13 +205,20 @@ function App() {
                                 Bod - 100
                             </Button>
                         </Flex>
-                        <Flex align="center" justify="center">
+                        <Flex
+                            align="center"
+                            justify="center"
+                            direction="column"
+                        >
                             <Text
                                 size="8"
                                 as="p"
                                 style={{ fontWeight: "bold" }}
                             >
                                 {String(offer)}
+                            </Text>
+                            <Text style={{ opacity: 0.5 }} size="3">
+                                (min {minOffer})
                             </Text>
                         </Flex>
                         <Flex direction="column" gap="2">
