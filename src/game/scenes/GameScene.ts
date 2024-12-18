@@ -1321,6 +1321,22 @@ export class Player {
     }
 }
 
+export type ScoreBoardItem = {
+    ourScore: number;
+    theirScore: number;
+    itemType: "initial" | "others-won" | "others-lost" | "won" | "lost";
+};
+
+export type GamePhase = "dealing" | "offer" | "play" | "gameover";
+
+export type GameOverInfo = {
+    player: Player;
+    won: boolean;
+    score: number;
+    offered: number;
+    scoreBoard: ScoreBoardItem[];
+};
+
 export class GameScene extends Scene {
     currentlyDragging!: Phaser.GameObjects.Sprite;
     testKey: Phaser.Input.Keyboard.Key;
@@ -1339,7 +1355,8 @@ export class GameScene extends Scene {
     dealerPlayerIndex = 0;
     turnPlayerIndex = 0;
     startedGamePlayerIndex = 0;
-    gamePhase: "dealing" | "offer" | "play" = "dealing";
+    gamePhase: GamePhase = "dealing";
+    scoreBoard: ScoreBoardItem[];
 
     constructor() {
         super("GameScene");
@@ -1353,7 +1370,7 @@ export class GameScene extends Scene {
         });
     }
 
-    returnCardsToDealerDeckAndDeal() {
+    newGame() {
         this.gamePhase = "dealing";
         this.dealerPlayerIndex++;
         if (this.dealerPlayerIndex >= 4) this.dealerPlayerIndex = 0;
@@ -1503,12 +1520,13 @@ export class GameScene extends Scene {
     }
 
     create() {
+        this.resetScoreBoard();
         this.dealerPlayerIndex = Math.floor(Math.random() * 4);
 
         const ourWonCards = new CardCollection(
             "hand",
             this.getWidth() / 2,
-            this.getHeight() / 2 - 400,
+            this.getHeight() / 2 - 350,
             0
         );
         ourWonCards.cardScale = CARD_SCALE * 0.6;
@@ -1517,7 +1535,7 @@ export class GameScene extends Scene {
 
         const theirWonCards = new CardCollection(
             "hand",
-            this.getWidth() / 2 - 400,
+            this.getWidth() / 2 - 350,
             this.getHeight() / 2,
             90
         );
@@ -1570,8 +1588,12 @@ export class GameScene extends Scene {
 
         this.playerTurnTriangle.setDepth(20);
 
+        this.input.keyboard!.on("keydown-B", () => {
+            this.stopGame();
+        });
+
         this.input.keyboard!.on("keydown-A", () => {
-            this.returnCardsToDealerDeckAndDeal();
+            this.newGame();
         });
 
         this.dropZone = this.add
@@ -1641,10 +1663,6 @@ export class GameScene extends Scene {
                 // this.events.emit("cardplayed", dropped);
             }
         });
-
-        // this.events.on("cardplayed", (player: Player, card: Card) => {
-
-        // });
 
         this.shuffleCards();
         this.dealCards();
@@ -1758,55 +1776,121 @@ export class GameScene extends Scene {
             }
         }
 
-        player.hand.cards.forEach((card) => {
-            card.setEnabled(true);
-        });
+        this.time.delayedCall(nextPlayerPlaysAt, () => {
+            player.hand.cards.forEach((card) => {
+                card.setEnabled(true);
+            });
 
-        this.dropZoneCollection.addCard(card);
-        card.setDepth(this.dropZoneCollection.cards.length + 10);
-        card.setFaceDown(false);
+            this.dropZoneCollection.addCard(card);
+            card.setDepth(this.dropZoneCollection.cards.length + 10);
+            card.setFaceDown(false);
 
-        if (this.dropZoneCollection.cards.length >= 4) {
-            console.log("End of round, who won?");
-            const [highestCard, _highestCardScore] = getWinningCard(
-                this.dropZoneCollection.cards,
-                this.troef!
-            );
+            if (this.dropZoneCollection.cards.length >= 4) {
+                console.log("End of round, who won?");
+                const [highestCard, _highestCardScore] = getWinningCard(
+                    this.dropZoneCollection.cards,
+                    this.troef!
+                );
 
-            console.log(
-                "getwinningcard %s = %s",
-                this.dropZoneCollection.cards
-                    .map((e) => e.toString())
-                    .join(","),
-                highestCard.toString()
-            );
+                console.log(
+                    "getwinningcard %s = %s",
+                    this.dropZoneCollection.cards
+                        .map((e) => e.toString())
+                        .join(","),
+                    highestCard.toString()
+                );
 
-            console.log(
-                "Player %d won with",
-                highestCard.originalOwner.index,
-                highestCard.toString()
-            );
+                console.log(
+                    "Player %d won with",
+                    highestCard.originalOwner.index,
+                    highestCard.toString()
+                );
 
-            this.time.delayedCall(nextPlayerPlaysAt + 1000, () => {
-                [...this.dropZoneCollection.cards].forEach((card) => {
-                    highestCard.originalOwner.wonCards.addCard(card);
+                this.time.delayedCall(1000, () => {
+                    [...this.dropZoneCollection.cards].forEach((card) => {
+                        highestCard.originalOwner.wonCards.addCard(card);
+                    });
                 });
-            });
 
-            this.time.delayedCall(nextPlayerPlaysAt + 2000, () => {
-                if (highestCard.originalOwner.hand.cards.length <= 0) {
-                    console.log("End of game!");
-                } else {
-                    this.playerBeginPlay(highestCard.originalOwner.index);
-                }
-            });
+                this.time.delayedCall(2000, () => {
+                    if (highestCard.originalOwner.hand.cards.length <= 0) {
+                        this.stopGame();
+                    } else {
+                        this.playerBeginPlay(highestCard.originalOwner.index);
+                    }
+                });
+            } else {
+                this.time.delayedCall(500, () => {
+                    this.playerBeginPlay((this.turnPlayerIndex + 1) % 4);
+                });
+            }
+
+            this.events.emit("cardplayed", player, card);
+        });
+    }
+
+    resetScoreBoard() {
+        this.scoreBoard = [
+            { ourScore: 12, theirScore: 12, itemType: "initial" },
+        ];
+    }
+
+    stopGame() {
+        console.log("Game over!");
+        this.gamePhase = "gameover";
+
+        const playingPlayer = this.players[this.startedGamePlayerIndex];
+
+        let score = playingPlayer.shownWijsScore;
+        playingPlayer.wonCards.cards.forEach(
+            (c) => (score += getCardScore(c, this.troef === c.suit))
+        );
+
+        const playingPlayerWon = score >= playingPlayer.offered!;
+        const localPlayer = this.getLocalPlayer();
+        const meten = Math.floor(playingPlayer.offered! / 50);
+        const lastScoreBoardItem = this.scoreBoard[this.scoreBoard.length - 1];
+
+        if (
+            playingPlayer === localPlayer ||
+            playingPlayer.isFriend(localPlayer)
+        ) {
+            if (playingPlayerWon) {
+                this.scoreBoard.push({
+                    ourScore: lastScoreBoardItem.ourScore - meten,
+                    theirScore: lastScoreBoardItem.theirScore,
+                    itemType: "won",
+                });
+            } else {
+                this.scoreBoard.push({
+                    ourScore: lastScoreBoardItem.ourScore + meten,
+                    theirScore: lastScoreBoardItem.theirScore - meten,
+                    itemType: "lost",
+                });
+            }
         } else {
-            this.time.delayedCall(nextPlayerPlaysAt + 500, () => {
-                this.playerBeginPlay((this.turnPlayerIndex + 1) % 4);
-            });
+            if (playingPlayerWon) {
+                this.scoreBoard.push({
+                    ourScore: lastScoreBoardItem.ourScore,
+                    theirScore: lastScoreBoardItem.theirScore - meten,
+                    itemType: "others-won",
+                });
+            } else {
+                this.scoreBoard.push({
+                    ourScore: lastScoreBoardItem.ourScore - meten,
+                    theirScore: lastScoreBoardItem.theirScore + meten,
+                    itemType: "others-lost",
+                });
+            }
         }
 
-        this.events.emit("cardplayed", player, card);
+        this.events.emit("gameover", {
+            player: playingPlayer,
+            won: playingPlayerWon,
+            score,
+            offered: playingPlayer.offered!,
+            scoreBoard: this.scoreBoard,
+        } as GameOverInfo);
     }
 
     getLocalPlayer() {
@@ -1853,7 +1937,7 @@ export class GameScene extends Scene {
             if (highestOfferPlayer === null) {
                 // console.log("Nobody proposed an offer");
                 // alert("Niemand heeft geboden! Opnieuw schudden");
-                this.returnCardsToDealerDeckAndDeal();
+                this.newGame();
             } else {
                 highestOfferPlayer = highestOfferPlayer as Player;
 

@@ -1,6 +1,12 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { IRefPhaserGame, PhaserGame } from "./game/PhaserGame";
-import { CardSuit, GameScene, Player } from "./game/scenes/GameScene";
+import {
+    CardSuit,
+    GameOverInfo,
+    GameScene,
+    Player,
+    ScoreBoardItem,
+} from "./game/scenes/GameScene";
 import {
     Dialog,
     Button,
@@ -12,7 +18,122 @@ import {
     Box,
     Separator,
     AlertDialog,
+    Heading,
+    Table,
 } from "@radix-ui/themes";
+
+function ScoreBoard(props: { scoreBoard: ScoreBoardItem[] }) {
+    return (
+        <Table.Root size="1">
+            <Table.Header>
+                <Table.Row>
+                    <Table.ColumnHeaderCell>Wij</Table.ColumnHeaderCell>
+                    <Table.ColumnHeaderCell>Zij</Table.ColumnHeaderCell>
+                    {/* <Table.ColumnHeaderCell></Table.ColumnHeaderCell> */}
+                </Table.Row>
+            </Table.Header>
+
+            <Table.Body>
+                {props.scoreBoard.map((row, i) => (
+                    <Table.Row
+                        key={i}
+                        style={{
+                            backgroundColor:
+                                row.itemType === "won" ||
+                                row.itemType === "others-lost"
+                                    ? "var(--green-4)"
+                                    : row.itemType === "lost" ||
+                                      row.itemType === "others-won"
+                                    ? "var(--red-4)"
+                                    : undefined,
+                        }}
+                    >
+                        <Table.RowHeaderCell>
+                            {row.ourScore}
+                        </Table.RowHeaderCell>
+                        <Table.Cell>{row.theirScore}</Table.Cell>
+                        {/* <Table.Cell>Developer</Table.Cell> */}
+                    </Table.Row>
+                ))}
+            </Table.Body>
+        </Table.Root>
+    );
+}
+
+function GameOverDialog(props: {
+    open: boolean;
+    onNewGame: () => void;
+    gameOverInfo: GameOverInfo;
+    localPlayer: Player;
+}) {
+    const localPlayerWon =
+        props.gameOverInfo.player === props.localPlayer ||
+        props.gameOverInfo.player.isFriend(props.localPlayer)
+            ? props.gameOverInfo.won
+            : !props.gameOverInfo.won;
+
+    return (
+        <AlertDialog.Root open={props.open}>
+            <AlertDialog.Trigger>
+                <Button color="red"></Button>
+            </AlertDialog.Trigger>
+            <AlertDialog.Content maxWidth="450px">
+                <AlertDialog.Title color={localPlayerWon ? "green" : "red"}>
+                    {localPlayerWon ? "Ronde gewonnen!" : "Ronde verloren..."}
+                </AlertDialog.Title>
+                <AlertDialog.Description size="2">
+                    {props.gameOverInfo.player === props.localPlayer ? (
+                        <>Jij hebt</>
+                    ) : (
+                        <>{props.gameOverInfo.player.getName()} heeft</>
+                    )}{" "}
+                    {props.gameOverInfo.won ? (
+                        <>
+                            alle nodige punten kunnen halen (
+                            {props.gameOverInfo.score} van de geboden{" "}
+                            {props.gameOverInfo.offered}).
+                        </>
+                    ) : (
+                        <>
+                            niet alle nodige punten kunnen halen (hebben maar{" "}
+                            {props.gameOverInfo.score} van de geboden{" "}
+                            {props.gameOverInfo.offered}).
+                        </>
+                    )}
+                </AlertDialog.Description>
+
+                <Heading my="3" size="3">
+                    Tussenstand
+                </Heading>
+                <ScoreBoard scoreBoard={props.gameOverInfo.scoreBoard} />
+
+                {/* <AlertDialog.Action> */}
+                <Button
+                    style={{ width: "100%" }}
+                    mt="4"
+                    variant="solid"
+                    color="green"
+                    size="4"
+                    onClick={props.onNewGame}
+                >
+                    Nieuw spel
+                </Button>
+                {/* </AlertDialog.Action> */}
+
+                {/* <Flex gap="3" mt="4" justify="end">
+                    <AlertDialog.Cancel>
+                        <Button variant="soft" color="gray">
+                            Cancel
+                        </Button>
+                    </AlertDialog.Cancel>
+                    <AlertDialog.Action>
+                        
+                    </AlertDialog.Action>
+                </Flex> */}
+            </AlertDialog.Content>
+        </AlertDialog.Root>
+    );
+}
 
 function App() {
     //  References to the PhaserGame component (game and scene are exposed)
@@ -29,44 +150,11 @@ function App() {
     const [minOffer, setCurrentMaxOffer] = useState<number>(0);
     const [offer, setOffer] = useState<number>(100);
 
+    const [showGameOverDialog, setShowGameOverDialog] = useState(false);
+    const [gameOverInfo, setGameOverInfo] = useState<GameOverInfo | null>(null);
+
     const scene = phaserRef.current?.scene;
     let localPlayer = scene?.getLocalPlayer();
-
-    // let offers: React.ReactNode[] = [];
-    // if (scene) {
-    //     let dealerPlayer = scene.getDealer();
-    //     let localPlayer = scene.getLocalPlayer();
-    //     let offered = true;
-    //     for (let p = 0; p < 4; p++) {
-    //         let pl = scene.getPlayer((dealerPlayer.index + 1 + p) % 4);
-    //         if (pl.index === 0) {
-    //             offered = false;
-    //         }
-
-    //         offers.push(
-    //             <li>
-    //                 Speler{" "}
-    //                 <Text as="span" style={{ fontWeight: "bold" }}>
-    //                     {pl.getName()}{" "}
-    //                     {pl.isFriend(localPlayer) ? "(maat)" : null}
-    //                     {pl === localPlayer ? "(jij)" : null}
-    //                 </Text>{" "}
-    //                 {!offered ? (
-    //                     <>moet nog bieden</>
-    //                 ) : pl.offered !== null ? (
-    //                     <>
-    //                         bied{" "}
-    //                         <Text as="span" style={{ fontWeight: "bold" }}>
-    //                             {pl.offered}
-    //                         </Text>
-    //                     </>
-    //                 ) : (
-    //                     <>heeft getpast.</>
-    //                 )}
-    //             </li>
-    //         );
-    //     }
-    // }
 
     function submitOffer(offer: number | null) {
         const scene = phaserRef.current!.scene!;
@@ -79,7 +167,15 @@ function App() {
             <PhaserGame
                 ref={phaserRef}
                 onSceneLoaded={(scene) => {
-                    console.log("currentActiveScene", scene);
+                    scene.events.on(
+                        "gameover",
+                        (gameOverInfo: GameOverInfo) => {
+                            console.log("gameover", gameOverInfo);
+                            setGameOverInfo(gameOverInfo);
+                            setShowGameOverDialog(true);
+                        }
+                    );
+
                     scene.events.on(
                         "shouldoffer",
                         (
@@ -91,14 +187,6 @@ function App() {
                             } | null,
                             alreadyOfferedPlayers: Player[]
                         ) => {
-                            // console.log(
-                            //     "Should offer",
-                            //     player,
-                            //     recommendedSuit,
-                            //     recommendedOffer,
-                            //     alreadyOfferedPlayers
-                            // );
-
                             let currentMaxOffer = 90;
                             alreadyOfferedPlayers.forEach((o) => {
                                 if (
@@ -118,6 +206,19 @@ function App() {
                     );
                 }}
             />
+
+            {gameOverInfo && localPlayer && (
+                <GameOverDialog
+                    localPlayer={localPlayer}
+                    open={showGameOverDialog}
+                    gameOverInfo={gameOverInfo}
+                    onNewGame={() => {
+                        setShowGameOverDialog(false);
+                        scene?.newGame();
+                    }}
+                />
+            )}
+
             <AlertDialog.Root
                 open={showOfferDialog}
                 onOpenChange={(o) => setShowOfferDialog(o)}
