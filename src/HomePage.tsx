@@ -1,4 +1,12 @@
-import { Button, Flex, Heading, Text } from "@radix-ui/themes";
+import {
+    Box,
+    Button,
+    Callout,
+    Flex,
+    Heading,
+    Table,
+    Text,
+} from "@radix-ui/themes";
 import { useNavigate } from "react-router";
 
 export function HomePage() {
@@ -26,6 +34,7 @@ export function HomePage() {
                 >
                     Start nieuw spel
                 </Button>
+                <Box height="100px"></Box>
                 <Text
                     align="center"
                     style={{
@@ -38,8 +47,55 @@ export function HomePage() {
                 </Text>
             </Flex>
 
-            <Flex direction="column" minHeight="100vh" p="4">
-                <Heading size="8">Tussenstand</Heading>
+            <Flex
+                direction="column"
+                minHeight="100vh"
+                p="8"
+                style={{ backgroundColor: "#222224" }}
+            >
+                <Heading size="8">Scorebord</Heading>
+                <Text as="p" my="2">
+                    Elke speler heeft een oneindige boom voor elk speletje dat
+                    hij/zij speelt.
+                </Text>
+
+                <Callout.Root color="yellow" mb="2">
+                    <Callout.Icon>{/* <InfoCircledIcon /> */}</Callout.Icon>
+                    <Callout.Text>
+                        Het scorebord is nog in ontwikkeling en bevat op dit
+                        moment dummy informatie.
+                    </Callout.Text>
+                </Callout.Root>
+
+                <Table.Root>
+                    <Table.Header>
+                        <Table.Row>
+                            <Table.ColumnHeaderCell width="20px">
+                                #
+                            </Table.ColumnHeaderCell>
+                            <Table.ColumnHeaderCell>
+                                Naam
+                            </Table.ColumnHeaderCell>
+                            <Table.ColumnHeaderCell>
+                                Meten
+                            </Table.ColumnHeaderCell>
+                        </Table.Row>
+                    </Table.Header>
+
+                    <Table.Body>
+                        <Table.Row>
+                            <Table.RowHeaderCell>1</Table.RowHeaderCell>
+                            <Table.Cell>Stijn Rogiest</Table.Cell>
+                            <Table.Cell>-10</Table.Cell>
+                        </Table.Row>
+
+                        <Table.Row>
+                            <Table.RowHeaderCell>2</Table.RowHeaderCell>
+                            <Table.Cell>Brent Rogiest</Table.Cell>
+                            <Table.Cell>-5</Table.Cell>
+                        </Table.Row>
+                    </Table.Body>
+                </Table.Root>
             </Flex>
         </Flex>
     );
