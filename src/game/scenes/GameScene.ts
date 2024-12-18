@@ -3,9 +3,7 @@ import { GameObjects, Scene } from "phaser";
 import { EventBus } from "../EventBus";
 
 // const SCALE = window.innerWidth < 500 ? 0.5 : 1;
-const CARD_SCALE = 2;
-const CARD_WIDTH = 72;
-const CARD_HEIGHT = 96;
+const CARD_SCALE = 1;
 
 const MOBILE = window.innerWidth < 800;
 
@@ -15,7 +13,6 @@ export enum CardSuit {
     HEARTS = 2,
     DIAMONDS = 3,
 }
-const FACE_DOWN_FRAME = 13;
 
 function getCardSuitOrder(suit: CardSuit, noHearts = false) {
     switch (suit) {
@@ -41,6 +38,8 @@ export class Card extends Phaser.GameObjects.Sprite {
     public currentlyInCollection?: CardCollection;
     public originalOwner: Player;
 
+    static cardBackFrame = 13;
+
     // For value, 2 = 2 ... 13 = king, 14 = ace
     constructor(
         scene: Scene,
@@ -55,10 +54,10 @@ export class Card extends Phaser.GameObjects.Sprite {
             value = 2;
         }
 
-        let fr = suit * 14 + (value == 14 ? 0 : value - 1);
-        super(scene, x, y, "card", isFaceDown ? FACE_DOWN_FRAME : fr);
+        let frame = suit * 14 + (value == 14 ? 0 : value - 1);
+        super(scene, x, y, "card", isFaceDown ? Card.cardBackFrame : frame);
 
-        this.faceFrame = fr;
+        this.faceFrame = frame;
 
         this.isFaceDown = isFaceDown;
 
@@ -169,7 +168,7 @@ export class Card extends Phaser.GameObjects.Sprite {
             yoyo: true,
             ease: Phaser.Math.Easing.Circular.InOut,
             onYoyo: () => {
-                this.setFrame(faceDown ? FACE_DOWN_FRAME : this.faceFrame);
+                this.setFrame(faceDown ? Card.cardBackFrame : this.faceFrame);
             },
             onComplete: () => {
                 this.scale = CARD_SCALE;
@@ -1366,17 +1365,35 @@ export class GameScene extends Scene {
     gamePhase: GamePhase = "dealing";
     scoreBoard: ScoreBoardItem[];
     clickToOffer = false;
+    // cardStyle: "old" | "new" = "old";
 
     constructor() {
         super("GameScene");
     }
 
     preload() {
-        this.load.image("cards", "assets/cards.png");
-        this.load.spritesheet("card", "assets/cards.png", {
-            frameWidth: CARD_WIDTH,
-            frameHeight: CARD_HEIGHT,
-        });
+        let useOldCardStyle = Math.random() < 0.01;
+
+        if (useOldCardStyle) {
+            // this.load.image("cards", "assets/cards.png");
+            this.load.spritesheet("card", "assets/cards.png", {
+                frameWidth: 150,
+                frameHeight: 200,
+            });
+            Card.cardBackFrame = Math.random() < 0.5 ? 13 : 13 + 14;
+        } else {
+            // this.load.image("cards", "assets/cards2.png");
+            this.load.spritesheet("card", "assets/cards2.png", {
+                frameWidth: 150,
+                frameHeight: 200,
+            });
+            Card.cardBackFrame =
+                Math.random() < 0.8
+                    ? 13
+                    : Math.random() < 0.8
+                    ? 13 + 14
+                    : 13 + 14 + 14;
+        }
     }
 
     newGame() {
@@ -1625,8 +1642,8 @@ export class GameScene extends Scene {
                 "Sleep kaart\nhier",
                 {
                     fontFamily: "sans-serif",
-                    fontSize: MOBILE ? 38 : 28,
-                    color: "#aaaaaa",
+                    fontSize: MOBILE ? 42 : 28,
+                    color: "#cccccc",
                     // stroke: "#000000",
                     // strokeThickness: 8,
                     align: "center",
@@ -2142,7 +2159,7 @@ export class GameScene extends Scene {
                 break;
             }
             case "play": {
-                this.dropZoneText.text = "Sleep kaart\nhier";
+                this.dropZoneText.text = "Sleep kaart\nnaar hier";
 
                 let playingPlayer = this.players[this.startedGamePlayerIndex];
 
