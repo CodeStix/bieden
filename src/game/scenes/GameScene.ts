@@ -7,6 +7,8 @@ const CARD_SCALE = 2;
 const CARD_WIDTH = 72;
 const CARD_HEIGHT = 96;
 
+const MOBILE = window.innerWidth < 800;
+
 export enum CardSuit {
     CLUBS = 0,
     SPADES = 1,
@@ -898,10 +900,10 @@ export class Player {
                 ? game.getHeight() / 2
                 : index == 2
                 ? EDGE_SPACING
-                : game.getHeight() - EDGE_SPACING * 2,
+                : game.getHeight() - EDGE_SPACING * (MOBILE ? 2 : 1),
             index == 3 ? -90 : index * 90
         );
-        if (index === 0 && window.innerWidth < 800) {
+        if (index === 0 && MOBILE) {
             this.hand.cardScale = CARD_SCALE * 2;
             this.hand.spacing = 120;
         } else {
@@ -1348,8 +1350,8 @@ export class GameScene extends Scene {
     testKey: Phaser.Input.Keyboard.Key;
 
     troef: CardSuit | null = null;
-    troefText: Phaser.GameObjects.Text;
-    scoreText: Phaser.GameObjects.Text;
+    mainText: Phaser.GameObjects.Text;
+    subText: Phaser.GameObjects.Text;
     allCards: Card[];
     players: Player[];
     dropZone: Phaser.GameObjects.GameObject;
@@ -1533,7 +1535,7 @@ export class GameScene extends Scene {
         const ourWonCards = new CardCollection(
             "hand",
             this.getWidth() / 2,
-            this.getHeight() / 2 - 350,
+            this.getHeight() / 2 - 325,
             0
         );
         ourWonCards.cardScale = CARD_SCALE * 0.6;
@@ -1542,7 +1544,7 @@ export class GameScene extends Scene {
 
         const theirWonCards = new CardCollection(
             "hand",
-            this.getWidth() / 2 - 350,
+            this.getWidth() / 2 - 325,
             this.getHeight() / 2,
             90
         );
@@ -1623,7 +1625,7 @@ export class GameScene extends Scene {
                 "Sleep kaart\nhier",
                 {
                     fontFamily: "sans-serif",
-                    fontSize: 38,
+                    fontSize: MOBILE ? 38 : 28,
                     color: "#aaaaaa",
                     // stroke: "#000000",
                     // strokeThickness: 8,
@@ -1633,25 +1635,30 @@ export class GameScene extends Scene {
             .setOrigin(0.5)
             .setDepth(2);
 
-        this.troefText = this.add
-            .text(this.getWidth() / 2, this.getHeight() / 4 - 40, "Troef = ?", {
-                fontFamily: "sans-serif",
-                fontSize: 64,
-                color: "#ffffff",
-                // stroke: "#000000",
-                // strokeThickness: 8,
-                align: "center",
-            })
-            .setOrigin(0.5)
-            .setDepth(2);
-        this.scoreText = this.add
+        this.mainText = this.add
             .text(
                 this.getWidth() / 2,
-                this.getHeight() / 4 + 40,
+                this.getHeight() / 4 - (MOBILE ? 40 : 16),
+                "Troef = ?",
+                {
+                    fontFamily: "sans-serif",
+                    fontSize: MOBILE ? 64 : 28,
+                    color: "#ffffff",
+                    // stroke: "#000000",
+                    // strokeThickness: 8,
+                    align: "center",
+                }
+            )
+            .setOrigin(0.5)
+            .setDepth(2);
+        this.subText = this.add
+            .text(
+                this.getWidth() / 2,
+                this.getHeight() / 4 + (MOBILE ? 40 : 16),
                 "Current score",
                 {
                     fontFamily: "sans-serif",
-                    fontSize: 56,
+                    fontSize: MOBILE ? 56 : 24,
                     color: "#eeeeee",
                     // stroke: "#000000",
                     // strokeThickness: 8,
@@ -1999,10 +2006,6 @@ export class GameScene extends Scene {
             // Local player
             console.log("Local player should offer", recommendedOffer);
 
-            // this.dropZone.removeAllListeners("pointerdown")
-
-            this.dropZoneText.text = "Klik hier om een bod te maken";
-
             this.dropZone.once("pointerdown", () => {
                 const wijsScore = recommendedOffer
                     ? getWijsScore(
@@ -2120,8 +2123,8 @@ export class GameScene extends Scene {
             case "dealing": {
                 let dealerPlayer = this.players[this.dealerPlayerIndex];
                 this.dropZoneText.text = "";
-                this.troefText.text = "Kaarten verdelen";
-                this.scoreText.text = dealerPlayer.getName() + " is dealer.";
+                this.mainText.text = "Kaarten verdelen";
+                this.subText.text = dealerPlayer.getName() + " is dealer.";
                 break;
             }
             case "offer": {
@@ -2131,8 +2134,8 @@ export class GameScene extends Scene {
                 );
 
                 this.dropZoneText.text = "Klik hier om\neen bod te maken";
-                this.troefText.text = `Bieden`;
-                this.scoreText.text =
+                this.mainText.text = `Bieden`;
+                this.subText.text =
                     maxOffer === 0
                         ? `Er is nog niks geboden.`
                         : `${maxOffer} geboden door ${maxOfferPlayer.getName()}`;
@@ -2148,7 +2151,7 @@ export class GameScene extends Scene {
                     cardScore += getCardScore(card, card.suit === this.troef);
                 });
 
-                this.troefText.text =
+                this.mainText.text =
                     this.troef !== null
                         ? "Troef: " + getNameForSuit(this.troef)
                         : `${playingPlayer.getName()} moet troef bepalen`;
@@ -2157,12 +2160,12 @@ export class GameScene extends Scene {
                     playingPlayer.shownWijsScore + cardScore >=
                     playingPlayer.offered!;
 
-                this.scoreText.text = `${playingPlayer.getName()} heeft ${
+                this.subText.text = `${playingPlayer.getName()} heeft ${
                     playingPlayer.shownWijsScore + cardScore
                 } / ${playingPlayer.offered} (${
                     playingPlayer.shownWijsScore
                 } wijs)`;
-                this.scoreText.setColor(won ? "#00ff00" : "#eeeeee");
+                this.subText.setColor(won ? "#00ff00" : "#eeeeee");
                 break;
             }
         }

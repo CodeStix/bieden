@@ -74,9 +74,6 @@ function GameOverDialog(props: {
 
     return (
         <AlertDialog.Root open={props.open}>
-            <AlertDialog.Trigger>
-                <Button color="red"></Button>
-            </AlertDialog.Trigger>
             <AlertDialog.Content maxWidth="450px">
                 <AlertDialog.Title color={localPlayerWon ? "green" : "red"}>
                     {localPlayerWon ? "Ronde gewonnen!" : "Ronde verloren..."}
@@ -107,7 +104,6 @@ function GameOverDialog(props: {
                 </Heading>
                 <ScoreBoard scoreBoard={props.gameOverInfo.scoreBoard} />
 
-                {/* <AlertDialog.Action> */}
                 <Button
                     style={{ width: "100%" }}
                     mt="4"
@@ -118,18 +114,6 @@ function GameOverDialog(props: {
                 >
                     Nieuw spel
                 </Button>
-                {/* </AlertDialog.Action> */}
-
-                {/* <Flex gap="3" mt="4" justify="end">
-                    <AlertDialog.Cancel>
-                        <Button variant="soft" color="gray">
-                            Cancel
-                        </Button>
-                    </AlertDialog.Cancel>
-                    <AlertDialog.Action>
-                        
-                    </AlertDialog.Action>
-                </Flex> */}
             </AlertDialog.Content>
         </AlertDialog.Root>
     );
@@ -358,41 +342,6 @@ export function GamePage() {
                     >
                         {offer} bieden
                     </Button>
-
-                    {/* <RadioCards.Root
-                        // value={offer}
-
-                        columns={{ initial: "1", sm: "3" }}
-                    >
-                        {[
-                            100, 110, 120, 130, 140, 150, 160, 170, 180, 190,
-                            200, 210, 220, 230, 240, 250, 260, 270, 280, 290,
-                            300,
-                        ].map((o) => (
-                            <RadioCards.Item
-                                value={String(o)}
-                                key={o}
-                                onClick={(ev) => {
-                                    setOffer(String(o));
-                                }}
-                            >
-                                <Flex direction="column" width="100%">
-                                    <Text weight="bold">Bied {o}</Text>
-                                </Flex>
-                            </RadioCards.Item>
-                        ))}
-                    </RadioCards.Root> */}
-
-                    {/* <Flex gap="3" mt="4" justify="end">
-                        <AlertDialog.Close>
-                            <Button variant="soft" color="gray">
-                                Annuleren
-                            </Button>
-                        </AlertDialog.Close>
-                        <AlertDialog.Close>
-                            <Button>Bod plaatsen</Button>
-                        </AlertDialog.Close>
-                    </Flex> */}
                 </AlertDialog.Content>
             </AlertDialog.Root>
         </div>
