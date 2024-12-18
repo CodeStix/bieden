@@ -1759,8 +1759,6 @@ export class GameScene extends Scene {
 
         let nextPlayerPlaysAt = 0;
 
-        console.log("shouldShowWijs", shouldShowWijs);
-
         if (shouldShowWijs) {
             const wijs = calculateWijs(player.hand.cards);
             const wijsScore = getWijsScore(wijs, this.troef!);
@@ -2051,10 +2049,19 @@ export class GameScene extends Scene {
                 );
             });
         } else {
+            const currentMaxOffer =
+                alreadyOfferedPlayers.length === 0
+                    ? 0
+                    : max(alreadyOfferedPlayers, (pl) => pl.offered ?? 0)[1];
+
             this.time.delayedCall(1000, () => {
                 this.putOffer(
                     player,
-                    recommendedOffer == null ? null : recommendedOffer[1]
+                    recommendedOffer == null
+                        ? null
+                        : recommendedOffer[1] > currentMaxOffer
+                        ? recommendedOffer[1]
+                        : null
                 );
             });
         }
