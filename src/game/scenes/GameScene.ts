@@ -729,9 +729,15 @@ function getRecommendedOffer(
             }
         }
 
-        const winningRounds = cards.filter(
+        let winningRounds = cards.filter(
             (card) => card.suit === troef || card.value === 14
         ).length;
+        if (!cards.some((e) => e.suit === troef && e.value === 11)) {
+            winningRounds--;
+        }
+        if (!cards.some((e) => e.suit === troef && e.value === 9)) {
+            winningRounds--;
+        }
 
         let pointsScore = winningRounds * (POINTS_AVAILABLE / 8);
 
@@ -1037,34 +1043,6 @@ export class Player {
         });
     }
 
-    // getWinChanceAgainstPlayerForCard(
-    //     enemyPlayer: Player,
-    //     card: Card,
-    //     troef: CardSuit
-    // ) {
-    //     const knowledgeAboutEnemy = this.knowledgePerPlayer.get(enemyPlayer)!;
-
-    //     for (const hasCard of knowledgeAboutEnemy.hasCards) {
-    //         if (cardGreaterThan(hasCard, card, troef)) {
-    //             // This card can win, enemy player can win 100%
-    //             return 0.0;
-    //         }
-    //     }
-
-    //     let potentialWinningCards = 0;
-    //     for (const maybeHasCard of knowledgeAboutEnemy.couldHaveCards) {
-    //         if (cardGreaterThan(maybeHasCard, card, troef)) {
-    //             // This card can win
-    //             potentialWinningCards++;
-    //             return 0.0; // TODO ???
-    //         }
-    //     }
-    //     return (
-    //         1.0 -
-    //         potentialWinningCards / knowledgeAboutEnemy.couldHaveCards.size
-    //     );
-    // }
-
     /**
      * Returns the chances for each card the next players have them.
      */
@@ -1089,18 +1067,11 @@ export class Player {
             (e) => !nextPlayers.includes(e) && e !== this
         );
 
-        // let bestPotentialWinningCard: Card | null = null;
         const nextCardChances = new Map<
             Card,
             { chance: number; owners: Set<Player> }
         >();
 
-        // for (const player of nextPlayers) {
-        //     const knowledge = this.knowledgePerPlayer.get(player)!;
-        //     for (const hasCard of knowledge.hasCards) {
-
-        //     }
-        // }
         for (const hasCard of nextPlayersHaveCards) {
             console.assert(
                 !nextCardChances.has(hasCard),
@@ -1122,8 +1093,6 @@ export class Player {
         }
 
         for (const potentialCard of nextPlayersCouldHaveCards) {
-            // if (nextCardChances.has(potentialCard)) continue;
-
             let previousPlayerCountThatCouldHaveCard = 0;
             let previousPlayHasCard = false;
             for (const prevPlayer of previousPlayers) {
@@ -1174,19 +1143,6 @@ export class Player {
         }
 
         return nextCardChances;
-
-        // if (bestPotentialWinningCard === null) {
-        //     return ["me", 1.0];
-        // }
-
-        // let bestPotentialWinningCardWinChance =
-        //     nextPlayersHaveWinningCardChanges.get(bestPotentialWinningCard)!;
-
-        // if (bestPotentialWinningCard.originalOwner.isFriend(this)) {
-        //     return ["friend", bestPotentialWinningCardWinChance];
-        // } else {
-        //     return ["me", 1.0 - bestPotentialWinningCardWinChance];
-        // }
     }
 
     getRecommendedPlayCard3(
@@ -1194,27 +1150,18 @@ export class Player {
         onCards: Card[],
         troef: CardSuit
     ): Card {
-        // const nextFriendPlayer = nextPlayers.find((e) => e.isFriend(this));
-
         const nextCardsChances = this.getNextCardsChances(nextPlayers);
 
-        // if (nextFriendPlayer) {
-        //     // Friend still has to play
-        //     const friendKnowledge =
-        //         this.knowledgePerPlayer.get(nextFriendPlayer)!;
-        //     // friendKnowledge.couldHaveCard
+        // for (const [k, v] of nextCardsChances.entries()) {
+        //     console.log(
+        //         "Next card chance",
+        //         k.toString(),
+        //         (v.chance * 100).toFixed(1),
+        //         Array.from(v.owners)
+        //             .map((e) => e.getName())
+        //             .join("|")
+        //     );
         // }
-
-        for (const [k, v] of nextCardsChances.entries()) {
-            console.log(
-                "Next card chance",
-                k.toString(),
-                (v.chance * 100).toFixed(1),
-                Array.from(v.owners)
-                    .map((e) => e.getName())
-                    .join("|")
-            );
-        }
 
         const playableCards = this.hand.cards.filter((card) =>
             isCardPlayable(onCards, this.hand.cards, card, troef)
@@ -1246,11 +1193,6 @@ export class Player {
                 currentlyWinningCard === null
                     ? true
                     : cardGreaterThan(playCard, currentlyWinningCard, troef);
-
-            // if (currentlyWinningCard !== null && !cardGreaterThan(playCard, currentlyWinningCard, troef)) {
-            //     // Cannot win using card
-            //     continue;
-            // }
 
             const winningNextCards = new Map(
                 Array.from(nextCardsChances.entries()).filter(
@@ -1366,73 +1308,6 @@ export class Player {
         }
     }
 
-    // getChancePlayerHasCard(player: Player, card: Card) {
-    //     const knowledge = this.knowledgePerPlayer.get(player)!;
-    //     if (knowledge.hasCards.has(card)) {
-    //         return 1.0;
-    //     }
-    //     if (!knowledge.couldHaveCards.has(card)) {
-    //         return 0.0;
-    //     }
-
-    //     let otherPlayerCountThatCouldHave = 0;
-    //     let otherPlayerCount = 0;
-
-    //     for (const [
-    //         otherPlayer,
-    //         otherKnowledge,
-    //     ] of this.knowledgePerPlayer.entries()) {
-    //         if (otherPlayer === player) {
-    //             continue;
-    //         }
-    //         if (otherKnowledge.hasCards.has(card)) {
-    //             return 0.0;
-    //         }
-
-    //         otherPlayerCount++;
-    //         if (otherKnowledge.couldHaveCards.has(card)) {
-    //             otherPlayerCountThatCouldHave++;
-    //         }
-    //     }
-
-    //     return 1.0 - otherPlayerCountThatCouldHave / otherPlayerCount;
-    // }
-
-    // thinkOneOfPlayersHasCard(
-    //     players: Player[],
-    //     card: Card
-    // ): boolean | undefined {
-    //     for (const player of players) {
-    //         const hasCard = this.thinkPlayerHasCard(player, card);
-    //         if (hasCard === true) {
-    //             return true;
-    //         }
-    //         if (hasCard === undefined) {
-    //             return undefined;
-    //         }
-    //     }
-    //     return false;
-    // }
-
-    // thinkPlayerHasCard(player: Player, card: Card): boolean | undefined {
-    //     const knowledge = this.knowledgePerPlayer.get(player)!;
-    //     if (knowledge.hasCards.has(card)) {
-    //         console.assert(
-    //             !knowledge.doesntHaveCards.has(card),
-    //             "!knowledge.doesntHaveCards.has(card)"
-    //         );
-    //         return true;
-    //     }
-    //     if (knowledge.doesntHaveCards.has(card)) {
-    //         console.assert(
-    //             !knowledge.hasCards.has(card),
-    //             "!knowledge.hasCards.has(card)"
-    //         );
-    //         return false;
-    //     }
-    //     return undefined;
-    // }
-
     getName() {
         return "Player " + this.index;
     }
@@ -1444,249 +1319,6 @@ export class Player {
     isFriend(ofPlayer: Player) {
         return ofPlayer.index === this.getFriendIndex();
     }
-
-    // getRecommendedPlayCard2(
-    //     nextPlayers: Player[],
-    //     onCards: Card[],
-    //     troef: CardSuit
-    // ): Card {
-    //     const playableCards = this.hand.cards.filter((card) =>
-    //         isCardPlayable(onCards, this.hand.cards, card, troef)
-    //     );
-
-    //     let winningPlayableCards = playableCards;
-    //     if (onCards.length > 0) {
-    //         const [highestPlayedCard, highestPlayedOrder] = getWinningCard(
-    //             onCards,
-    //             troef
-    //         );
-
-    //         if (highestPlayedCard.originalOwner.isFriend(this)) {
-    //             // Friend is winning, fat
-    //             const chanceFriendWins = this.getNextCardsChances(
-    //                 nextPlayers,
-    //                 highestPlayedCard,
-    //                 troef
-    //             );
-
-    //             console.log(
-    //                 "Friend is winning with win chance",
-    //                 chanceFriendWins
-    //             );
-
-    //             if (chanceFriendWins > 0.5) {
-    //                 // Help friend by fatting
-    //                 const [sortedFattingCards] = multipleMax(
-    //                     playableCards,
-    //                     (card) => getCardFattingOrder(card, card.suit === troef)
-    //                 );
-
-    //                 console.log(
-    //                     "Fat with one of",
-    //                     sortedFattingCards.map((e) => e.toString()).join("|")
-    //                 );
-
-    //                 return pickRandom(sortedFattingCards);
-    //             }
-    //         }
-
-    //         winningPlayableCards = playableCards.filter((e) =>
-    //             cardGreaterThan(e, highestPlayedCard, troef)
-    //         );
-    //     }
-
-    //     if (winningPlayableCards.length > 0) {
-    //         const [bestCards, bestCardWinChance] = multipleMax(
-    //             winningPlayableCards,
-    //             (card) => this.getNextCardsChances(nextPlayers, card, troef)
-    //         );
-
-    //         console.log(
-    //             "Win chance with",
-    //             bestCards.map((e) => e.toString()).join("|"),
-    //             "is",
-    //             bestCardWinChance * 100,
-    //             "percent (best)"
-    //         );
-
-    //         if (bestCardWinChance > 0.5) {
-    //             const [bestCardWithLeastValue] = min(bestCards, (card) =>
-    //                 getCardOrder(card, card.suit === troef)
-    //             );
-    //             return bestCardWithLeastValue;
-    //         }
-
-    //         // if (bestCardWinChance > 0.5) {
-    //         //     return pickRandom(bestCards);
-    //         // }
-    //     }
-
-    //     // throw away bad card / or help friend
-    //     const nextFriend = nextPlayers.find((pl) => this.isFriend(pl));
-    //     if (nextFriend) {
-    //         // Friend still has to play
-    //         const friendKnowledge = this.knowledgePerPlayer.get(nextFriend)!;
-    //         // friendKnowledge.hasCards.
-    //         if (
-    //             friendKnowledge.hint &&
-    //             Array.from(friendKnowledge.couldHaveCards).some(
-    //                 (e) => e.suit === friendKnowledge.hint!.suit
-    //             )
-    //         ) {
-    //             // Use hinted suit
-    //             const friendHelpCards = playableCards.filter(
-    //                 (e) => e.suit === friendKnowledge.hint!.suit
-    //             );
-
-    //             const [bestFriendHelpCards, bestFriendCardWinChance] =
-    //                 multipleMax(friendHelpCards, (card) =>
-    //                     this.getNextCardsChances(nextPlayers, card, troef)
-    //                 );
-
-    //             console.log(
-    //                 "Best friend fatting chance",
-    //                 bestFriendCardWinChance,
-    //                 "for cards",
-    //                 bestFriendHelpCards.map((e) => e.toString).join("|")
-    //             );
-
-    //             if (
-    //                 bestFriendCardWinChance > 0.5 &&
-    //                 friendHelpCards.length > 0
-    //             ) {
-    //                 const [sortedFattingCards] = multipleMax(
-    //                     bestFriendHelpCards,
-    //                     (card) => getCardFattingOrder(card, card.suit === troef)
-    //                 );
-
-    //                 console.log(
-    //                     "Fat with one of",
-    //                     sortedFattingCards.map((e) => e.toString()).join("|")
-    //                 );
-
-    //                 return pickRandom(sortedFattingCards);
-    //             }
-    //         }
-    //     }
-
-    //     const [leastScoreCards] = multipleMin(playableCards, (card) =>
-    //         getCardScore(card, card.suit === troef)
-    //     );
-    //     return min(leastScoreCards, (card) =>
-    //         getCardOrder(card, card.suit === troef)
-    //     )[0];
-    //     // return pickRandom(leastScoreCards);
-    // }
-
-    // getRecommendedPlayCard(onCards: Card[], troef: CardSuit) {
-    //     if (onCards.length === 0) {
-    //         if (this.friendHint) {
-    //             const friendCards = this.hand.cards.filter(
-    //                 (e) => e.suit === this.friendHint!.suit
-    //             );
-    //             if (friendCards.length > 0) {
-    //                 // Put card with highest score first
-    //                 friendCards.sort(
-    //                     (a, b) =>
-    //                         getCardScore(b, b.suit === troef) -
-    //                         getCardScore(a, a.suit === troef)
-    //                 );
-
-    //                 return friendCards[0];
-    //             }
-    //         }
-
-    //         const playableCards = [...this.hand.cards];
-    //         // Put highest order first
-    //         playableCards.sort(
-    //             (a, b) =>
-    //                 getCardOrder(b, b.suit === troef) -
-    //                 getCardOrder(a, a.suit === troef)
-    //         );
-    //         return playableCards[0];
-    //     }
-
-    //     let scoreInCards = 0;
-    //     onCards.forEach((e) => {
-    //         scoreInCards += getCardScore(e, e.suit === troef);
-    //     });
-
-    //     const [highestPlayedCard, highestPlayedOrder] = getWinningCard(
-    //         onCards,
-    //         troef
-    //     );
-
-    //     const playableWinCards = this.hand.cards.filter(
-    //         (e) =>
-    //             (e.suit === troef && highestPlayedCard.suit !== troef) ||
-    //             (e.suit === highestPlayedCard.suit &&
-    //                 getCardOrder(e, e.suit === troef) > highestPlayedOrder)
-    //     );
-    //     // Put the highest order first
-    //     playableWinCards.sort(
-    //         (a, b) =>
-    //             getCardOrder(b, b.suit === troef) -
-    //             getCardOrder(a, a.suit === troef)
-    //     );
-
-    //     let friendWillProbablyWin = false;
-    //     if (
-    //         onCards.length <= 1 &&
-    //         this.friendHint !== null &&
-    //         onCards[0].suit === this.friendHint.suit
-    //     ) {
-    //         friendWillProbablyWin = true;
-    //     }
-
-    //     if (highestPlayedCard.originalOwner.isFriend(this)) {
-    //         friendWillProbablyWin = true;
-    //     }
-
-    //     if (!friendWillProbablyWin && playableWinCards.length > 0) {
-    //         // You could win this, buy or nah?
-    //         if (playableWinCards[0].suit !== onCards[0].suit) {
-    //             // You can buy, want to proceed?
-    //             if (scoreInCards > 10) {
-    //                 return playableWinCards[0];
-    //             }
-    //         } else {
-    //             // Ez win
-    //             return playableWinCards[0];
-    //         }
-    //     }
-
-    //     // Play lowest card (follow if possible) (fat if friend will probably win)
-    //     let playableCards = getPlayableCards(onCards, this.hand.cards, troef);
-    //     // if (playableCards.length <= 0) {
-    //     //     playableCards = [...this.hand.cards];
-    //     // }
-    //     if (friendWillProbablyWin) {
-    //         // Put card with highest score first
-    //         playableCards.sort(
-    //             (a, b) =>
-    //                 getCardScore(b, b.suit === troef) -
-    //                 getCardScore(a, a.suit === troef)
-    //         );
-    //     } else {
-    //         // Put card with lowest score first
-    //         playableCards.sort(
-    //             (a, b) =>
-    //                 getCardScore(a, a.suit === troef) -
-    //                 getCardScore(b, b.suit === troef)
-    //         );
-    //     }
-
-    //     // playableCards.sort(
-    //     //     (a, b) =>
-    //     //         (a.value === 10
-    //     //             ? friendWillProbablyWin
-    //     //                 ? 0
-    //     //                 : 13.5
-    //     //             : a.value) -
-    //     //         (b.value === 10 ? (friendWillProbablyWin ? 0 : 13.5) : b.value));
-
-    //     return playableCards[0];
-    // }
 }
 
 export class GameScene extends Scene {
@@ -1876,7 +1508,7 @@ export class GameScene extends Scene {
         const ourWonCards = new CardCollection(
             "hand",
             this.getWidth() / 2,
-            this.getHeight() / 2 - 300,
+            this.getHeight() / 2 - 400,
             0
         );
         ourWonCards.cardScale = CARD_SCALE * 0.6;
@@ -1885,7 +1517,7 @@ export class GameScene extends Scene {
 
         const theirWonCards = new CardCollection(
             "hand",
-            this.getWidth() / 2 - 300,
+            this.getWidth() / 2 - 400,
             this.getHeight() / 2,
             90
         );
@@ -1899,8 +1531,6 @@ export class GameScene extends Scene {
                 new Player(this, i, i % 2 === 0 ? ourWonCards : theirWonCards)
             );
         }
-
-        // console.log("size", this.sys.game.scale.gameSize);
 
         this.allCards = [];
         for (let s = 0; s < 4; s++) {
@@ -1938,40 +1568,11 @@ export class GameScene extends Scene {
             0xbbbbbb
         );
 
-        // this.playerTurnTriangle = this.add.rectangle(
-        //     window.innerWidth / 2,
-        //     window.innerHeight / 2,
-        //     60,
-        //     60,
-
-        //     0xaaaaaa
-        // );
         this.playerTurnTriangle.setDepth(20);
-
-        // this.playerTurnTriangle.x
 
         this.input.keyboard!.on("keydown-A", () => {
             this.returnCardsToDealerDeckAndDeal();
         });
-
-        // let counter = 0;
-        // this.input.keyboard!.on("keydown-A", () => {
-        //     for (let i = 0; i < 4; i++) {
-        //         let card = new Card(
-        //             this,
-        //             100,
-        //             100,
-        //             Math.floor(counter / 13),
-        //             (counter % 13) + 2,
-        //             false
-        //         );
-
-        //         this.children.add(card);
-        //         this.players[i].hand.addCard(card);
-        //     }
-
-        //     counter++;
-        // });
 
         this.dropZone = this.add
             .rectangle(
@@ -1985,19 +1586,6 @@ export class GameScene extends Scene {
             .setInteractive({
                 dropZone: true,
             } as Phaser.Types.Input.InputConfiguration);
-
-        // These don't work (i don't get why?)
-        // this.dropZone.on("dragenter", () => {
-        //     console.log("dragenter");
-        // });
-        // this.dropZone.on("dragleave", () => {
-        //     console.log("dragleave");
-        // });
-        // this.dropZone.on("dragover", (ev: any, x, y) => {
-        //     console.log("dragover", ev, x, y);
-        // });
-
-        // this.add.sprite(30, 60, "card", 10);
 
         this.dropZoneText = this.add
             .text(
@@ -2386,7 +1974,7 @@ export class GameScene extends Scene {
                 "For troef: " +
                     CardSuit[this.troef ?? player.shouldStartWith!.suit]
             );
-            printKnowledge(player.knowledgePerPlayer);
+            // printKnowledge(player.knowledgePerPlayer);
 
             return;
         }
