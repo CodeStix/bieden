@@ -387,6 +387,36 @@ function getCardOrder(card: Card, isTroef: boolean) {
     }
 }
 
+function getHintingCard(
+    onCards: Card[],
+    availableCards: Card[],
+    troef: CardSuit
+): Card | null {
+    const hintingCards = availableCards.filter(
+        (e) =>
+            (onCards.length === 0 || e.suit !== onCards[0].suit) &&
+            e.suit !== troef
+    );
+    if (hintingCards.length <= 0) {
+        return null;
+    }
+
+    const bestCard = max(hintingCards, (card) =>
+        getCardOrder(card, card.suit === troef)
+    )[0];
+
+    const cardsFromSameBestSuit = availableCards.filter(
+        (card) => card.suit === bestCard.suit
+    );
+    if (cardsFromSameBestSuit.length <= 1) {
+        return null;
+    }
+
+    return min(cardsFromSameBestSuit, (card) =>
+        getCardScore(card, card.suit === troef)
+    )[0];
+}
+
 function cardGreaterThan(a: Card, b: Card, troef: CardSuit) {
     if (a.suit === troef && b.suit !== troef) {
         return true;
@@ -798,6 +828,7 @@ export class Player {
     offered: number | null = null;
     shouldStartWith: CardSuit | null = null;
     // friendHint: Card | null = null;
+    hinted = false;
     knowledgePerPlayer: Map<
         Player,
         {
@@ -866,6 +897,7 @@ export class Player {
         this.game.events.on("begindealing", () => {
             this.offered = null;
             this.shouldStartWith = null;
+            this.hinted = false;
             // this.friendHint = null;
             this.knowledgePerPlayer.clear();
             this.game.players.forEach((player) => {
@@ -1260,15 +1292,13 @@ export class Player {
                     getCardScore(move.card, move.card.suit === troef)
                 )[0].card;
             } else {
+                let hint = getHintingCard(onCards, playableCards, troef);
+                if (hint) return hint;
+
                 return min(helpMyselfMoves, (move) =>
                     getCardScore(move.card, move.card.suit === troef)
                 )[0].card;
             }
-
-            // return pickRandom(helpMyselfMoves.map((e) => e.card));
-            // return max(helpFriendCards, (move) =>
-            //     getCardFattingOrder(move.card, move.card.suit === troef)
-            // )[0];
         }
 
         const helpFriendMoves = bestCardsToPlay;
@@ -1278,6 +1308,27 @@ export class Player {
                 getCardFattingOrder(move.card, move.card.suit === troef)
             )[0].card;
         } else {
+            const friendKnowledge = this.knowledgePerPlayer.get(friendPlayer)!;
+            if (
+                friendKnowledge.hint &&
+                Array.from(friendKnowledge.couldHaveCards).some(
+                    (card) => card.suit === friendKnowledge.hint!.suit
+                )
+            ) {
+                const friendHelpCards = Array.from(playableCards).filter(
+                    (e) => e.suit === friendKnowledge.hint!.suit
+                );
+                if (friendHelpCards.length > 0) {
+                    console.log("Return card from hint", friendHelpCards);
+                    return max(friendHelpCards, (card) =>
+                        getCardFattingOrder(card, card.suit === troef)
+                    )[0];
+                }
+            }
+
+            let hint = getHintingCard(onCards, playableCards, troef);
+            if (hint) return hint;
+
             return min(helpFriendMoves, (move) =>
                 getCardFattingOrder(move.card, move.card.suit === troef)
             )[0].card;
