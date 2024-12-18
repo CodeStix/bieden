@@ -901,8 +901,13 @@ export class Player {
                 : game.getHeight() - EDGE_SPACING * 2,
             index == 3 ? -90 : index * 90
         );
-        this.hand.cardScale = CARD_SCALE * (index === 0 ? 2 : 1);
-        this.hand.spacing = index === 0 ? 120 : 80;
+        if (index === 0 && window.innerWidth < 800) {
+            this.hand.cardScale = CARD_SCALE * 2;
+            this.hand.spacing = 120;
+        } else {
+            this.hand.cardScale = CARD_SCALE * 1;
+            this.hand.spacing = 80;
+        }
 
         const LEFT_RIGHT_SPACE = 80;
         const TOP_SPACE = 50;
@@ -1358,6 +1363,7 @@ export class GameScene extends Scene {
     startedGamePlayerIndex = 0;
     gamePhase: GamePhase = "dealing";
     scoreBoard: ScoreBoardItem[];
+    clickToOffer = false;
 
     constructor() {
         super("GameScene");
@@ -1993,25 +1999,31 @@ export class GameScene extends Scene {
             // Local player
             console.log("Local player should offer", recommendedOffer);
 
-            const wijsScore = recommendedOffer
-                ? getWijsScore(
-                      calculateWijs(player.hand.cards),
-                      recommendedOffer[0].suit
-                  )
-                : null;
+            // this.dropZone.removeAllListeners("pointerdown")
 
-            this.events.emit(
-                "shouldoffer",
-                player,
-                recommendedOffer
-                    ? {
-                          wijs: wijsScore,
-                          suit: recommendedOffer[0].suit,
-                          offer: recommendedOffer[1],
-                      }
-                    : null,
-                alreadyOfferedPlayers
-            );
+            this.dropZoneText.text = "Klik hier om een bod te maken";
+
+            this.dropZone.once("pointerdown", () => {
+                const wijsScore = recommendedOffer
+                    ? getWijsScore(
+                          calculateWijs(player.hand.cards),
+                          recommendedOffer[0].suit
+                      )
+                    : null;
+
+                this.events.emit(
+                    "shouldoffer",
+                    player,
+                    recommendedOffer
+                        ? {
+                              wijs: wijsScore,
+                              suit: recommendedOffer[0].suit,
+                              offer: recommendedOffer[1],
+                          }
+                        : null,
+                    alreadyOfferedPlayers
+                );
+            });
         } else {
             this.time.delayedCall(1000, () => {
                 this.putOffer(
@@ -2107,17 +2119,28 @@ export class GameScene extends Scene {
         switch (this.gamePhase) {
             case "dealing": {
                 let dealerPlayer = this.players[this.dealerPlayerIndex];
+                this.dropZoneText.text = "";
                 this.troefText.text = "Kaarten verdelen";
                 this.scoreText.text = dealerPlayer.getName() + " is dealer.";
                 break;
             }
             case "offer": {
-                this.troefText.text = "Bieden...";
-                this.scoreText.text = "Wachten tot iedereen geboden heeft.";
+                let [maxOfferPlayer, maxOffer] = max(
+                    this.players,
+                    (pl) => pl.offered ?? 0
+                );
 
+                this.dropZoneText.text = "Klik hier om\neen bod te maken";
+                this.troefText.text = `Bieden`;
+                this.scoreText.text =
+                    maxOffer === 0
+                        ? `Er is nog niks geboden.`
+                        : `${maxOffer} geboden door ${maxOfferPlayer.getName()}`;
                 break;
             }
             case "play": {
+                this.dropZoneText.text = "Sleep kaart\nhier";
+
                 let playingPlayer = this.players[this.startedGamePlayerIndex];
 
                 let cardScore = 0;
