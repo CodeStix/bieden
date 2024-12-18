@@ -756,10 +756,11 @@ function getRecommendedOffer(
         return null;
     }
 
-    if (alreadyOfferedPlayers.length > 2) {
-        // Round to previous 50
-        bestOffer = Math.floor(bestOffer / 50) * 50;
-    }
+    // Becomes too easy
+    // if (alreadyOfferedPlayers.length > 2) {
+    //     // Round to previous 50
+    //     bestOffer = Math.floor(bestOffer / 50) * 50;
+    // }
 
     const troefCards = cards.filter((card) => card.suit === bestOfferSuit);
 
@@ -2061,7 +2062,10 @@ export class GameScene extends Scene {
         if (playerIndex === 0) {
             // Local player
 
-            recommendedCard.mark(25);
+            let help = false;
+            if (help) {
+                recommendedCard.mark(25);
+            }
 
             player.hand.cards.forEach((card) => {
                 card.setEnabled(
