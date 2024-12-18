@@ -135,7 +135,7 @@ function GameOverDialog(props: {
     );
 }
 
-function App() {
+export function GamePage() {
     //  References to the PhaserGame component (game and scene are exposed)
     const phaserRef = useRef<IRefPhaserGame | null>(null);
     const [showOfferDialog, setShowOfferDialog] = useState(false);
@@ -398,6 +398,4 @@ function App() {
         </div>
     );
 }
-
-export default App;
 
