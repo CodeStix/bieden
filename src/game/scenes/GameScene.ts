@@ -1342,6 +1342,7 @@ export type GameOverInfo = {
     score: number;
     offered: number;
     scoreBoard: ScoreBoardItem[];
+    wonTree: boolean | undefined;
 };
 
 export class GameScene extends Scene {
@@ -1365,7 +1366,6 @@ export class GameScene extends Scene {
     gamePhase: GamePhase = "dealing";
     scoreBoard: ScoreBoardItem[];
     clickToOffer = false;
-    // cardStyle: "old" | "new" = "old";
 
     constructor() {
         super("GameScene");
@@ -1373,14 +1373,13 @@ export class GameScene extends Scene {
 
     preload() {
         let useOldCardStyle = Math.random() < 0.01;
-
         if (useOldCardStyle) {
             // this.load.image("cards", "assets/cards.png");
             this.load.spritesheet("card", "assets/cards.png", {
                 frameWidth: 150,
                 frameHeight: 200,
             });
-            Card.cardBackFrame = Math.random() < 0.5 ? 13 : 13 + 14;
+            Card.cardBackFrame = Math.random() < 0.8 ? 13 : 13 + 14;
         } else {
             // this.load.image("cards", "assets/cards2.png");
             this.load.spritesheet("card", "assets/cards2.png", {
@@ -1882,38 +1881,44 @@ export class GameScene extends Scene {
         const meten = Math.floor(playingPlayer.offered! / 50);
         const lastScoreBoardItem = this.scoreBoard[this.scoreBoard.length - 1];
 
+        let newScoreBoardItem: ScoreBoardItem;
         if (
             playingPlayer === localPlayer ||
             playingPlayer.isFriend(localPlayer)
         ) {
             if (playingPlayerWon) {
-                this.scoreBoard.push({
+                newScoreBoardItem = {
                     ourScore: lastScoreBoardItem.ourScore - meten,
                     theirScore: lastScoreBoardItem.theirScore,
                     itemType: "won",
-                });
+                };
             } else {
-                this.scoreBoard.push({
+                newScoreBoardItem = {
                     ourScore: lastScoreBoardItem.ourScore + meten,
                     theirScore: lastScoreBoardItem.theirScore - meten,
                     itemType: "lost",
-                });
+                };
             }
         } else {
             if (playingPlayerWon) {
-                this.scoreBoard.push({
+                newScoreBoardItem = {
                     ourScore: lastScoreBoardItem.ourScore,
                     theirScore: lastScoreBoardItem.theirScore - meten,
                     itemType: "others-won",
-                });
+                };
             } else {
-                this.scoreBoard.push({
+                newScoreBoardItem = {
                     ourScore: lastScoreBoardItem.ourScore - meten,
                     theirScore: lastScoreBoardItem.theirScore + meten,
                     itemType: "others-lost",
-                });
+                };
             }
         }
+        this.scoreBoard.push(newScoreBoardItem);
+
+        let treeDone =
+            newScoreBoardItem.ourScore <= 0 ||
+            newScoreBoardItem.theirScore <= 0;
 
         this.events.emit("gameover", {
             player: playingPlayer,
@@ -1921,6 +1926,7 @@ export class GameScene extends Scene {
             score,
             offered: playingPlayer.offered!,
             scoreBoard: this.scoreBoard,
+            wonTree: treeDone ? newScoreBoardItem.ourScore <= 0 : undefined,
         } as GameOverInfo);
     }
 

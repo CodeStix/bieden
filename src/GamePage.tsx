@@ -21,6 +21,8 @@ import {
     Heading,
     Table,
 } from "@radix-ui/themes";
+import { useNavigate } from "react-router";
+import Confetti from "react-confetti";
 
 function ScoreBoard(props: { scoreBoard: ScoreBoardItem[] }) {
     return (
@@ -66,6 +68,7 @@ function GameOverDialog(props: {
     gameOverInfo: GameOverInfo;
     localPlayer: Player;
 }) {
+    const navigate = useNavigate();
     const localPlayerWon =
         props.gameOverInfo.player === props.localPlayer ||
         props.gameOverInfo.player.isFriend(props.localPlayer)
@@ -73,49 +76,93 @@ function GameOverDialog(props: {
             : !props.gameOverInfo.won;
 
     return (
-        <AlertDialog.Root open={props.open}>
-            <AlertDialog.Content maxWidth="450px">
-                <AlertDialog.Title color={localPlayerWon ? "green" : "red"}>
-                    {localPlayerWon ? "Ronde gewonnen!" : "Ronde verloren..."}
-                </AlertDialog.Title>
-                <AlertDialog.Description size="2">
-                    {props.gameOverInfo.player === props.localPlayer ? (
-                        <>Jij hebt</>
+        <>
+            {props.gameOverInfo.wonTree === true && <Confetti />}
+            <AlertDialog.Root open={props.open}>
+                <AlertDialog.Content maxWidth="450px">
+                    <AlertDialog.Title
+                        color={
+                            props.gameOverInfo.wonTree === true
+                                ? "yellow"
+                                : props.gameOverInfo.wonTree === false
+                                ? "red"
+                                : localPlayerWon
+                                ? "green"
+                                : "red"
+                        }
+                    >
+                        {props.gameOverInfo.wonTree === true
+                            ? "Boom gewonnen!"
+                            : props.gameOverInfo.wonTree === false
+                            ? "Boom verloren..."
+                            : localPlayerWon
+                            ? "Ronde gewonnen!"
+                            : "Ronde verloren..."}
+                    </AlertDialog.Title>
+                    <AlertDialog.Description size="2">
+                        {props.gameOverInfo.player === props.localPlayer ? (
+                            <>Jij hebt</>
+                        ) : (
+                            <>{props.gameOverInfo.player.getName()} heeft</>
+                        )}{" "}
+                        {props.gameOverInfo.won ? (
+                            <>
+                                alle nodige punten kunnen halen (
+                                {props.gameOverInfo.score} van de geboden{" "}
+                                {props.gameOverInfo.offered}).
+                            </>
+                        ) : (
+                            <>
+                                niet alle nodige punten kunnen halen (hebben
+                                maar {props.gameOverInfo.score} van de geboden{" "}
+                                {props.gameOverInfo.offered}).
+                            </>
+                        )}
+                    </AlertDialog.Description>
+
+                    <Heading my="3" size="3">
+                        Tussenstand
+                    </Heading>
+                    <ScoreBoard scoreBoard={props.gameOverInfo.scoreBoard} />
+
+                    {props.gameOverInfo.wonTree === undefined ? (
+                        <Button
+                            style={{ width: "100%" }}
+                            mt="4"
+                            variant="solid"
+                            color="green"
+                            size="4"
+                            onClick={props.onNewGame}
+                        >
+                            Start volgende ronde
+                        </Button>
                     ) : (
-                        <>{props.gameOverInfo.player.getName()} heeft</>
-                    )}{" "}
-                    {props.gameOverInfo.won ? (
                         <>
-                            alle nodige punten kunnen halen (
-                            {props.gameOverInfo.score} van de geboden{" "}
-                            {props.gameOverInfo.offered}).
-                        </>
-                    ) : (
-                        <>
-                            niet alle nodige punten kunnen halen (hebben maar{" "}
-                            {props.gameOverInfo.score} van de geboden{" "}
-                            {props.gameOverInfo.offered}).
+                            <Button
+                                style={{ width: "100%" }}
+                                mt="4"
+                                variant="solid"
+                                color="red"
+                                size="4"
+                                onClick={() => navigate("/")}
+                            >
+                                Spel verlaten
+                            </Button>
+                            <Button
+                                style={{ width: "100%" }}
+                                mt="2"
+                                variant="solid"
+                                color="green"
+                                size="4"
+                                onClick={() => (location.href = location.href)}
+                            >
+                                Nieuw spel
+                            </Button>
                         </>
                     )}
-                </AlertDialog.Description>
-
-                <Heading my="3" size="3">
-                    Tussenstand
-                </Heading>
-                <ScoreBoard scoreBoard={props.gameOverInfo.scoreBoard} />
-
-                <Button
-                    style={{ width: "100%" }}
-                    mt="4"
-                    variant="solid"
-                    color="green"
-                    size="4"
-                    onClick={props.onNewGame}
-                >
-                    Nieuw spel
-                </Button>
-            </AlertDialog.Content>
-        </AlertDialog.Root>
+                </AlertDialog.Content>
+            </AlertDialog.Root>
+        </>
     );
 }
 
