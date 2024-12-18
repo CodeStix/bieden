@@ -697,37 +697,65 @@ function sortCardsByScore(
 function getRecommendedOffer(
     cards: Card[],
     alreadyOfferedPlayers: Player[]
-): [CardSuit, number] | null {
+): [Card, number] | null {
     let wijs = calculateWijs(cards);
 
-    let bestSuit: CardSuit = CardSuit.CLUBS;
-    let bestSuitScore = 0;
-    for (let suit = 0; suit < 4; suit++) {
-        let score = getWijsScore(wijs, suit);
+    const POINTS_AVAILABLE = 141;
 
-        // console.log("Suit score", wijs, score, CardSuit[suit]);
-        if (score > bestSuitScore) {
-            bestSuit = suit;
-            bestSuitScore = score;
+    let offerPerSuit = new Map<CardSuit, number>();
+
+    for (let troef = 0; troef < 4; troef++) {
+        let wijsScore = 0;
+        for (const w of wijs) {
+            if (w.countsIfTroef(troef)) {
+                wijsScore += w.getScore();
+            }
         }
+
+        const winningRounds = cards.filter(
+            (card) => card.suit === troef || card.value === 14
+        ).length;
+
+        let pointsScore = winningRounds * (POINTS_AVAILABLE / 8);
+
+        let offer = Math.floor((wijsScore + pointsScore) / 10) * 10;
+        offerPerSuit.set(troef, offer);
     }
 
-    // let sequence = wijs.find(
-    //     (e) => e instanceof SequenceWijs && e.cards.length >= 4
-    // ) as SequenceWijs | undefined;
-    // if (sequence) {
-    //     return sequence.cards.some((e) => e.value === 11) ? 150 : 120;
-    // }
+    console.log("offerPerSuit", offerPerSuit);
 
-    // TODO add rules here
+    let [[bestOfferSuit, bestOffer]] = max(
+        Array.from(offerPerSuit.entries()),
+        ([, offer]) => offer
+    );
 
-    let offer = 60 + bestSuitScore;
-    offer = Math.floor(offer / 10) * 10;
-    if (offer >= 100) {
-        return [bestSuit, offer];
-    } else {
+    if (bestOffer < 100) {
         return null;
     }
+
+    if (alreadyOfferedPlayers.length > 2) {
+        // Round to previous 50
+        bestOffer = Math.floor(bestOffer / 50) * 50;
+    }
+
+    const troefCards = cards.filter((card) => card.suit === bestOfferSuit);
+
+    const jack = troefCards.find((card) => card.value === 9);
+    const nine = troefCards.find((card) => card.value === 9);
+    if (jack && nine) {
+        return [nine, bestOffer];
+    }
+    if (jack && !nine) {
+        return [jack, bestOffer];
+    }
+
+    const ace = troefCards.find((card) => card.value === 14);
+    if (!jack && nine && ace) {
+        return [ace, bestOffer];
+    }
+
+    let minCard = min(troefCards, (card) => getCardScore(card, true))[0];
+    return [minCard, bestOffer];
 }
 
 function getWinningCard(cards: Card[], troef: CardSuit): [Card, number] {
@@ -826,7 +854,7 @@ export class Player {
     wonCards: CardCollection;
     nameText: Phaser.GameObjects.Text;
     offered: number | null = null;
-    shouldStartWith: CardSuit | null = null;
+    shouldStartWith: Card | null = null;
     // friendHint: Card | null = null;
     hinted = false;
     knowledgePerPlayer: Map<
@@ -1129,17 +1157,18 @@ export class Player {
                 continue;
             }
 
-            console.assert(
-                !nextCardChances.has(potentialCard),
-                "!nextCardChances.has(potentialCard)"
-            );
-            nextCardChances.set(potentialCard, {
-                chance:
-                    1.0 -
-                    previousPlayerCountThatCouldHaveCard /
-                        (previousPlayers.length + 1),
-                owners: new Set(nextPlayersThatCouldHave),
-            });
+            // console.assert(
+            //     !nextCardChances.has(potentialCard),
+            //     "!nextCardChances.has(potentialCard)"
+            // );
+            if (!nextCardChances.has(potentialCard))
+                nextCardChances.set(potentialCard, {
+                    chance:
+                        1.0 -
+                        previousPlayerCountThatCouldHaveCard /
+                            (previousPlayers.length + 1),
+                    owners: new Set(nextPlayersThatCouldHave),
+                });
         }
 
         return nextCardChances;
@@ -2149,7 +2178,7 @@ export class GameScene extends Scene {
             player.index,
             player.offered,
             player.shouldStartWith
-                ? CardSuit[player.shouldStartWith]
+                ? player.shouldStartWith.toString()
                 : "nothing"
         );
 
@@ -2178,7 +2207,7 @@ export class GameScene extends Scene {
                     "Player has the highest offer",
                     highestOfferPlayer.index,
                     highestOfferPlayer.offered,
-                    CardSuit[highestOfferPlayer.shouldStartWith!]
+                    highestOfferPlayer.shouldStartWith!.toString()
                 );
 
                 this.players.forEach((pl) => {
@@ -2227,7 +2256,7 @@ export class GameScene extends Scene {
             this.events.emit(
                 "shouldoffer",
                 player,
-                recommendedOffer == null ? null : recommendedOffer[0],
+                recommendedOffer == null ? null : recommendedOffer[0].suit,
                 recommendedOffer == null ? null : recommendedOffer[1],
                 alreadyOfferedPlayers
             );
@@ -2267,17 +2296,7 @@ export class GameScene extends Scene {
 
         let recommendedCard: Card;
         if (this.troef === null) {
-            console.log(
-                "player.shouldStartWith",
-                player.shouldStartWith,
-                player.hand.cards
-            );
-            recommendedCard = max(
-                player.hand.cards.filter(
-                    (e) => e.suit === player.shouldStartWith
-                ),
-                (c) => getCardOrder(c, true)
-            )[0];
+            recommendedCard = player.shouldStartWith!;
         } else {
             recommendedCard = player.getRecommendedPlayCard3(
                 nextPlayers,
@@ -2305,7 +2324,8 @@ export class GameScene extends Scene {
             console.log(
                 "Local player should play, recommended card is",
                 recommendedCard.toString(),
-                "For troef: " + CardSuit[this.troef ?? player.shouldStartWith!]
+                "For troef: " +
+                    CardSuit[this.troef ?? player.shouldStartWith!.suit]
             );
             printKnowledge(player.knowledgePerPlayer);
 
