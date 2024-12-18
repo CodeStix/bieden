@@ -196,7 +196,7 @@ export function GamePage() {
     const help = false;
 
     return (
-        <div id="app">
+        <div id="app" style={{ overflow: "hidden" }}>
             <PhaserGame
                 ref={phaserRef}
                 onSceneLoaded={(scene) => {
