@@ -1757,50 +1757,60 @@ export class GameScene extends Scene {
             shouldShowWijs = true;
         }
 
+        if (
+            player.hand.cards.length === 7 &&
+            player.getFriendIndex() == this.startedGamePlayerIndex
+        ) {
+            console.log("Friend should show wijs");
+            shouldShowWijs = true;
+        }
+
         let nextPlayerPlaysAt = 0;
 
         if (shouldShowWijs) {
             const wijs = calculateWijs(player.hand.cards);
-            const wijsScore = getWijsScore(wijs, this.troef!);
+            if (wijs.length > 0) {
+                const wijsScore = getWijsScore(wijs, this.troef!);
 
-            player.shownWijsScore = wijsScore;
+                player.shownWijsScore = wijsScore;
 
-            console.log(
-                "Player",
-                player.getName(),
-                "shows wijs",
-                wijsScore,
-                wijs
-            );
+                console.log(
+                    "Player",
+                    player.getName(),
+                    "shows wijs",
+                    wijsScore,
+                    wijs
+                );
 
-            this.events.emit("showswijs", player, wijs);
+                this.events.emit("showswijs", player, wijs);
 
-            if (player !== this.getLocalPlayer()) {
-                const WIJS_SHOW_TIME = 3000;
+                if (player !== this.getLocalPlayer()) {
+                    const WIJS_SHOW_TIME = 3000;
 
-                nextPlayerPlaysAt += wijs.length * WIJS_SHOW_TIME;
+                    nextPlayerPlaysAt += wijs.length * WIJS_SHOW_TIME;
 
-                wijs.forEach((w, i) => {
-                    if (!w.countsIfTroef(this.troef!)) {
-                        return;
-                    }
+                    wijs.forEach((w, i) => {
+                        if (!w.countsIfTroef(this.troef!)) {
+                            return;
+                        }
 
-                    this.time.delayedCall(i * WIJS_SHOW_TIME, () => {
-                        w.getCards().forEach((card) => {
-                            card.setFaceDown(false);
-                            card.mark(25);
-                        });
-
-                        this.time.delayedCall(WIJS_SHOW_TIME - 500, () => {
+                        this.time.delayedCall(i * WIJS_SHOW_TIME, () => {
                             w.getCards().forEach((card) => {
-                                card.setFaceDown(
-                                    player !== this.getLocalPlayer()
-                                );
-                                card.stopMark(false);
+                                card.setFaceDown(false);
+                                card.mark(25);
+                            });
+
+                            this.time.delayedCall(WIJS_SHOW_TIME - 500, () => {
+                                w.getCards().forEach((card) => {
+                                    card.setFaceDown(
+                                        player !== this.getLocalPlayer()
+                                    );
+                                    card.stopMark(false);
+                                });
                             });
                         });
                     });
-                });
+                }
             }
         }
 
@@ -1868,8 +1878,9 @@ export class GameScene extends Scene {
         this.gamePhase = "gameover";
 
         const playingPlayer = this.players[this.startedGamePlayerIndex];
+        const friendPlayer = this.players[playingPlayer.getFriendIndex()];
 
-        let score = playingPlayer.shownWijsScore;
+        let score = playingPlayer.shownWijsScore + friendPlayer.shownWijsScore;
         playingPlayer.wonCards.cards.forEach(
             (c) => (score += getCardScore(c, this.troef === c.suit))
         );
@@ -2174,7 +2185,9 @@ export class GameScene extends Scene {
             case "play": {
                 this.dropZoneText.text = "Sleep kaart\nnaar hier";
 
-                let playingPlayer = this.players[this.startedGamePlayerIndex];
+                const playingPlayer = this.players[this.startedGamePlayerIndex];
+                const friendPlayer =
+                    this.players[playingPlayer.getFriendIndex()];
 
                 let cardScore = 0;
                 playingPlayer.wonCards.cards.forEach((card) => {
@@ -2186,14 +2199,17 @@ export class GameScene extends Scene {
                         ? "Troef: " + getNameForSuit(this.troef)
                         : `${playingPlayer.getName()} moet troef bepalen`;
 
-                const won =
-                    playingPlayer.shownWijsScore + cardScore >=
-                    playingPlayer.offered!;
+                const totalScore =
+                    cardScore +
+                    playingPlayer.shownWijsScore +
+                    friendPlayer.shownWijsScore;
+
+                const won = totalScore >= playingPlayer.offered!;
 
                 this.subText.text = `${playingPlayer.getName()} heeft ${
                     playingPlayer.shownWijsScore + cardScore
                 } / ${playingPlayer.offered} (${
-                    playingPlayer.shownWijsScore
+                    playingPlayer.shownWijsScore + friendPlayer.shownWijsScore
                 } wijs)`;
                 this.subText.setColor(won ? "#00ff00" : "#eeeeee");
                 break;
