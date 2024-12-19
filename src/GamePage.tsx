@@ -8,14 +8,10 @@ import {
     ScoreBoardItem,
 } from "./game/scenes/GameScene";
 import {
-    Dialog,
     Button,
     Flex,
-    TextField,
     Text,
-    RadioCards,
     Grid,
-    Box,
     Separator,
     AlertDialog,
     Heading,
@@ -26,7 +22,7 @@ import Confetti from "react-confetti";
 import {
     faArrowRight,
     faCoins,
-    faRightFromBracket,
+    faDoorOpen,
     faTimes,
 } from "@fortawesome/free-solid-svg-icons";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
@@ -155,7 +151,7 @@ function GameOverDialog(props: {
                                 onClick={() => navigate("/")}
                             >
                                 Spel verlaten{" "}
-                                <FontAwesomeIcon icon={faRightFromBracket} />
+                                <FontAwesomeIcon icon={faDoorOpen} />
                             </Button>
                             <Button
                                 style={{ width: "100%" }}

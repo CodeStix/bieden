@@ -50,10 +50,7 @@ export function HomePage() {
                             }}
                         >
                             <li>Pandoer</li>
-                            <li>
-                                Verbeteringen aan <br />
-                                bieden/spelen door robots
-                            </li>
+                            <li>Verbeteringen aan bieden door robots</li>
                             <li>Multiplayer</li>
                         </ul>
                     </Callout.Text>
