@@ -26,6 +26,7 @@ import {
     faTimes,
 } from "@fortawesome/free-solid-svg-icons";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
+import { incrementAirtableScore } from "./HomePage";
 
 function ScoreBoard(props: { scoreBoard: ScoreBoardItem[] }) {
     return (
@@ -212,6 +213,29 @@ export function GamePage() {
                             console.log("gameover", gameOverInfo);
                             setGameOverInfo(gameOverInfo);
                             setShowGameOverDialog(true);
+
+                            const localPlayer =
+                                phaserRef.current!.scene!.getLocalPlayer();
+                            const localPlayerPlayed =
+                                localPlayer === gameOverInfo.player ||
+                                localPlayer.isFriend(gameOverInfo.player);
+                            if (gameOverInfo.won) {
+                                if (localPlayerPlayed) {
+                                    void incrementAirtableScore(
+                                        -gameOverInfo.meten
+                                    );
+                                }
+                            } else {
+                                if (localPlayerPlayed) {
+                                    void incrementAirtableScore(
+                                        gameOverInfo.meten
+                                    );
+                                } else {
+                                    void incrementAirtableScore(
+                                        -gameOverInfo.meten
+                                    );
+                                }
+                            }
                         }
                     );
 

@@ -1349,6 +1349,7 @@ export type GameOverInfo = {
     offered: number;
     scoreBoard: ScoreBoardItem[];
     wonTree: boolean | undefined;
+    meten: number;
 };
 
 export class GameScene extends Scene {
@@ -1950,6 +1951,7 @@ export class GameScene extends Scene {
             score,
             offered: playingPlayer.offered!,
             scoreBoard: this.scoreBoard,
+            meten: meten,
             wonTree: treeDone ? newScoreBoardItem.ourScore <= 0 : undefined,
         } as GameOverInfo);
     }

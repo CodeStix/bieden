@@ -1,5 +1,6 @@
 import {
     faArrowRight,
+    faCheck,
     faCrown,
     faWarning,
 } from "@fortawesome/free-solid-svg-icons";
@@ -8,22 +9,66 @@ import {
     Box,
     Button,
     Callout,
+    Dialog,
     Flex,
     Heading,
     Skeleton,
     Table,
     Text,
+    TextField,
 } from "@radix-ui/themes";
 import { useNavigate } from "react-router";
 import Airtable from "airtable";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+
+export const LOCALSTORAGE_ITEM = "bieden-player-id";
 
 const airtableBase = new Airtable({
     apiKey: import.meta.env.VITE_SCOREBOARD_AIRTABLE_TOKEN,
 }).base(import.meta.env.VITE_SCOREBOARD_AIRTABLE_BASE);
 
+async function createAirtablePlayer(name: string) {
+    try {
+        const result = await airtableBase("BiedenScoreBoard").create([
+            {
+                fields: {
+                    name: name,
+                    score: 0,
+                    lastPlayedAt: new Date().getTime(),
+                },
+            },
+        ]);
+
+        return result[0].getId();
+    } catch (ex) {
+        console.error("Could not create airtable player", ex);
+    }
+}
+
+export async function incrementAirtableScore(amount: number) {
+    try {
+        const recordId = localStorage.getItem(LOCALSTORAGE_ITEM)!;
+
+        const record = await airtableBase("BiedenScoreBoard").find(recordId);
+
+        let currentScore = record.fields["score"] as number;
+        currentScore += amount;
+
+        await airtableBase("BiedenScoreBoard").update(recordId, {
+            score: currentScore,
+        });
+    } catch (ex) {
+        console.error("Could not increment airtable score");
+    }
+}
+
 export function HomePage() {
     const navigate = useNavigate();
+    const [showNameInput, setShowNameInput] = useState(false);
+    const [submittingName, setSubmittingName] = useState(false);
+
+    // 2024-12-19T22:13:52.026Z
+    // 2019-12-30T21:42:00.000Z
 
     return (
         <Flex direction="column">
@@ -43,7 +88,13 @@ export function HomePage() {
                     mt="4"
                     color="green"
                     size="4"
-                    onClick={() => navigate("/play")}
+                    onClick={() => {
+                        if (localStorage.getItem(LOCALSTORAGE_ITEM)) {
+                            navigate("/play");
+                        } else {
+                            setShowNameInput(true);
+                        }
+                    }}
                 >
                     Start nieuw spel <FontAwesomeIcon icon={faArrowRight} />
                 </Button>
@@ -94,7 +145,80 @@ export function HomePage() {
 
                 <GlobalScoreBoard />
             </Flex>
+
+            <InputNameDialog
+                submitting={submittingName}
+                open={showNameInput}
+                onOpenChange={(o) => setShowNameInput(o)}
+                onSubmit={async (name) => {
+                    setSubmittingName(true);
+                    await new Promise((res) => setTimeout(res, 1000));
+
+                    const playerId = await createAirtablePlayer(name);
+                    if (playerId) {
+                        localStorage.setItem(LOCALSTORAGE_ITEM, playerId);
+                    }
+
+                    navigate("/play");
+                    setSubmittingName(false);
+                    setShowNameInput(false);
+                }}
+            />
         </Flex>
+    );
+}
+
+function InputNameDialog(props: {
+    open: boolean;
+    onOpenChange: (open: boolean) => void;
+    onSubmit: (value: string) => void;
+    submitting: boolean;
+}) {
+    const [name, setName] = useState("");
+
+    const nameIsValid = useMemo(
+        () => /^[a-zA-Z0-9 _-]{2,30}$/.test(name),
+        [name]
+    );
+
+    return (
+        <Dialog.Root onOpenChange={props.onOpenChange} open={props.open}>
+            <Dialog.Content maxWidth="450px">
+                <Dialog.Title>Wat is je naam?</Dialog.Title>
+                <Dialog.Description size="2" mb="4">
+                    Je naam zal op het scoreboard komen.
+                </Dialog.Description>
+
+                <Flex direction="column" gap="3">
+                    <label>
+                        <Text as="div" size="2" mb="1" weight="bold">
+                            Naam
+                        </Text>
+                        <TextField.Root
+                            value={name}
+                            placeholder=""
+                            onChange={(ev) => setName(ev.target.value)}
+                        />
+                    </label>
+                </Flex>
+
+                <Flex gap="3" mt="4" justify="end">
+                    <Dialog.Close>
+                        <Button variant="soft" color="gray">
+                            Annuleren
+                        </Button>
+                    </Dialog.Close>
+                    <Button
+                        color="green"
+                        onClick={() => props.onSubmit(name.trim())}
+                        disabled={!nameIsValid || props.submitting}
+                        loading={props.submitting}
+                    >
+                        Opslaan <FontAwesomeIcon icon={faCheck} />
+                    </Button>
+                </Flex>
+            </Dialog.Content>
+        </Dialog.Root>
     );
 }
 
