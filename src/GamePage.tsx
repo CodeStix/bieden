@@ -23,6 +23,13 @@ import {
 } from "@radix-ui/themes";
 import { useNavigate } from "react-router";
 import Confetti from "react-confetti";
+import {
+    faArrowRight,
+    faCoins,
+    faRightFromBracket,
+    faTimes,
+} from "@fortawesome/free-solid-svg-icons";
+import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 
 function ScoreBoard(props: { scoreBoard: ScoreBoardItem[] }) {
     return (
@@ -134,7 +141,8 @@ function GameOverDialog(props: {
                             size="4"
                             onClick={props.onNewGame}
                         >
-                            Start volgende ronde
+                            Start volgende ronde{" "}
+                            <FontAwesomeIcon icon={faArrowRight} />
                         </Button>
                     ) : (
                         <>
@@ -146,7 +154,8 @@ function GameOverDialog(props: {
                                 size="4"
                                 onClick={() => navigate("/")}
                             >
-                                Spel verlaten
+                                Spel verlaten{" "}
+                                <FontAwesomeIcon icon={faRightFromBracket} />
                             </Button>
                             <Button
                                 style={{ width: "100%" }}
@@ -156,7 +165,8 @@ function GameOverDialog(props: {
                                 size="4"
                                 onClick={() => (location.href = location.href)}
                             >
-                                Nieuw spel
+                                Nieuw spel{" "}
+                                <FontAwesomeIcon icon={faArrowRight} />
                             </Button>
                         </>
                     )}
@@ -310,7 +320,7 @@ export function GamePage() {
                         style={{ width: "100%" }}
                         onClick={() => submitOffer(null)}
                     >
-                        Passen
+                        <FontAwesomeIcon icon={faTimes} /> Passen
                     </Button>
 
                     <Separator style={{ width: "100%", margin: "2rem 0" }} />
@@ -387,7 +397,7 @@ export function GamePage() {
                         style={{ width: "100%" }}
                         mt="4"
                     >
-                        {offer} bieden
+                        <FontAwesomeIcon icon={faCoins} /> {offer} bieden
                     </Button>
                 </AlertDialog.Content>
             </AlertDialog.Root>

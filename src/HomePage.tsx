@@ -1,3 +1,5 @@
+import { faArrowRight, faWarning } from "@fortawesome/free-solid-svg-icons";
+import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
     Box,
     Button,
@@ -32,8 +34,30 @@ export function HomePage() {
                     size="4"
                     onClick={() => navigate("/play")}
                 >
-                    Start nieuw spel
+                    Start nieuw spel <FontAwesomeIcon icon={faArrowRight} />
                 </Button>
+                <Callout.Root color="yellow" mb="2" mt="4">
+                    <Callout.Icon>
+                        <FontAwesomeIcon icon={faWarning} />
+                    </Callout.Icon>
+                    <Callout.Text style={{ margin: 0 }}>
+                        Op dit moment mist het online spel nog:
+                        <ul
+                            style={{
+                                margin: 0,
+                                paddingLeft: "1.5rem",
+                                marginTop: "0.3rem",
+                            }}
+                        >
+                            <li>Pandoer</li>
+                            <li>
+                                Verbeteringen aan <br />
+                                bieden/spelen door robots
+                            </li>
+                        </ul>
+                    </Callout.Text>
+                </Callout.Root>
+
                 <Box height="100px"></Box>
                 <Text
                     align="center"
@@ -60,7 +84,9 @@ export function HomePage() {
                 </Text>
 
                 <Callout.Root color="yellow" mb="2">
-                    <Callout.Icon>{/* <InfoCircledIcon /> */}</Callout.Icon>
+                    <Callout.Icon>
+                        <FontAwesomeIcon icon={faWarning} />
+                    </Callout.Icon>
                     <Callout.Text>
                         Het scorebord is nog in ontwikkeling en bevat op dit
                         moment dummy informatie.

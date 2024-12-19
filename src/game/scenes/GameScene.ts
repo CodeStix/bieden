@@ -1758,7 +1758,7 @@ export class GameScene extends Scene {
         }
 
         if (
-            player.hand.cards.length === 7 &&
+            player.hand.cards.length === 8 &&
             player.getFriendIndex() == this.startedGamePlayerIndex
         ) {
             console.log("Friend should show wijs");
@@ -2206,10 +2206,12 @@ export class GameScene extends Scene {
 
                 const won = totalScore >= playingPlayer.offered!;
 
-                this.subText.text = `${playingPlayer.getName()} heeft ${
-                    playingPlayer.shownWijsScore + cardScore
-                } / ${playingPlayer.offered} (${
-                    playingPlayer.shownWijsScore + friendPlayer.shownWijsScore
+                this.subText.text = `${playingPlayer.getName()} heeft ${totalScore} / ${
+                    playingPlayer.offered
+                } (${
+                    [playingPlayer.shownWijsScore, friendPlayer.shownWijsScore]
+                        .filter((e) => e > 0)
+                        .join(" + ") || "0"
                 } wijs)`;
                 this.subText.setColor(won ? "#00ff00" : "#eeeeee");
                 break;
