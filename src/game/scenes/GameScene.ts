@@ -1436,15 +1436,20 @@ export class GameScene extends Scene {
         }
 
         // Do 1 deck cut
-        let cuts = 2;
-        for (let i = 0; i < cuts; i++) {
-            let cutIndex =
-                Math.floor(Math.random() * (newAllCards.length - 8)) + 4;
-            newAllCards = [
-                ...newAllCards.slice(cutIndex),
-                ...newAllCards.slice(0, cutIndex),
-            ];
+        let centerCuts = Math.floor(Math.random() * 2);
+        for (let i = 0; i < centerCuts; i++) {
+            let start = Math.floor(Math.random() * 24 + 4);
+            let count = Math.floor(Math.random() * (32 - start - 2));
+
+            let removedCards = newAllCards.splice(start, count);
+            newAllCards.push(...removedCards);
         }
+
+        let cutIndex = Math.floor(Math.random() * newAllCards.length);
+        newAllCards = [
+            ...newAllCards.slice(cutIndex),
+            ...newAllCards.slice(0, cutIndex),
+        ];
 
         this.allCards = newAllCards;
 
