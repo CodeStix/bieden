@@ -316,7 +316,7 @@ export function GamePage() {
 
                     <Button
                         size="4"
-                        color="orange"
+                        color="red"
                         style={{ width: "100%" }}
                         onClick={() => submitOffer(null)}
                     >

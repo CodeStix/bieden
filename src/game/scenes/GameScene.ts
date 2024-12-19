@@ -832,7 +832,13 @@ function isCardPlayable(
     if (card.suit === troef) {
         return true;
     }
-    if (handCards.some((e) => e.suit === alreadyPlayedCards[0].suit)) {
+    if (
+        handCards.some(
+            (e) =>
+                !(e.suit === troef && e.value === 11) &&
+                e.suit === alreadyPlayedCards[0].suit
+        )
+    ) {
         return card.suit === alreadyPlayedCards[0].suit;
     }
     return true;
@@ -1551,7 +1557,7 @@ export class GameScene extends Scene {
         const ourWonCards = new CardCollection(
             "hand",
             this.getWidth() / 2,
-            this.getHeight() / 2 - 325,
+            this.getHeight() / 2 + 325,
             0
         );
         ourWonCards.cardScale = CARD_SCALE * 0.6;
@@ -1844,13 +1850,17 @@ export class GameScene extends Scene {
                     highestCard.toString()
                 );
 
-                this.time.delayedCall(1000, () => {
+                this.time.delayedCall(750, () => {
+                    highestCard.originalOwner.wonCards.cards.forEach((card) => {
+                        card.setFaceDown(true);
+                    });
+
                     [...this.dropZoneCollection.cards].forEach((card) => {
                         highestCard.originalOwner.wonCards.addCard(card);
                     });
                 });
 
-                this.time.delayedCall(2000, () => {
+                this.time.delayedCall(1500, () => {
                     if (highestCard.originalOwner.hand.cards.length <= 0) {
                         this.stopGame();
                     } else {

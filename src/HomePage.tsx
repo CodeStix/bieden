@@ -54,6 +54,7 @@ export function HomePage() {
                                 Verbeteringen aan <br />
                                 bieden/spelen door robots
                             </li>
+                            <li>Multiplayer</li>
                         </ul>
                     </Callout.Text>
                 </Callout.Root>
