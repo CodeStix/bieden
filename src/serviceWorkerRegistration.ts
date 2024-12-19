@@ -9,7 +9,7 @@
 
 // To learn more about the benefits of this model and instructions on how to
 // opt-in, read https://cra.link/PWA
-const PUBLIC_URL = "https://bieden.online";
+const PUBLIC_URL = import.meta.env.VITE_PUBLIC_URL; // "https://bieden.online";
 
 const isLocalhost = Boolean(
     window.location.hostname === "localhost" ||
